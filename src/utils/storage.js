@@ -201,24 +201,32 @@ async function loadAuditLogs() {
 }
 
 let cachedUserIp = 'Fetching...';
+let cachedUserLoc = 'Địa phương';
 
-// Tự động gọi API lấy IP công cộng khi script được load
+// Tự động gọi API lấy IP công cộng và vị trí khi script được load
 try {
-  fetch('https://api.ipify.org?format=json')
+  fetch('https://freeipapi.com/api/json')
     .then(res => res.json())
     .then(data => {
-      if (data?.ip) cachedUserIp = data.ip;
+      if (data?.ipAddress) {
+        cachedUserIp = data.ipAddress;
+        const locParts = [data.cityName, data.regionName, data.countryName].filter(Boolean);
+        cachedUserLoc = locParts.length > 0 ? locParts.join(', ') : 'Không rõ';
+      }
     })
     .catch(() => {
       cachedUserIp = '127.0.0.1';
+      cachedUserLoc = 'Địa phương';
     });
 } catch (_) {
   cachedUserIp = '127.0.0.1';
+  cachedUserLoc = 'Địa phương';
 }
 
 async function addAuditLog(log) {
   try {
     let finalIp = cachedUserIp;
+    let finalLoc = cachedUserLoc;
     
     // Nếu chưa fetch kịp thì thử fetch nhanh với timeout 2 giây
     if (finalIp === 'Fetching...') {
@@ -226,18 +234,23 @@ async function addAuditLog(log) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 2000);
         
-        const res = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
+        const res = await fetch('https://freeipapi.com/api/json', { signal: controller.signal });
         clearTimeout(timeoutId);
         
         const data = await res.json();
-        if (data?.ip) {
-          finalIp = data.ip;
-          cachedUserIp = data.ip;
+        if (data?.ipAddress) {
+          finalIp = data.ipAddress;
+          const locParts = [data.cityName, data.regionName, data.countryName].filter(Boolean);
+          finalLoc = locParts.length > 0 ? locParts.join(', ') : 'Không rõ';
+          cachedUserIp = data.ipAddress;
+          cachedUserLoc = finalLoc;
         } else {
           finalIp = '127.0.0.1';
+          finalLoc = 'Địa phương';
         }
       } catch (_) {
         finalIp = '127.0.0.1';
+        finalLoc = 'Địa phương';
       }
     }
 
@@ -245,6 +258,7 @@ async function addAuditLog(log) {
       time: new Date().toLocaleString('vi-VN'),
       timestamp: serverTimestamp(), // dùng để sort
       ip: finalIp,
+      location: finalLoc,
       device: navigator.userAgent.includes('Windows') ? 'Chrome - Windows' : 'Mobile - Browser',
       userAgent: navigator.userAgent,
       ...log

@@ -199,25 +199,97 @@ export default function AuditLogManager({ logs }) {
               </div>
 
               {/* IP / Agent Details */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Thông tin môi trường</h4>
-                <div className="space-y-3 bg-slate-50 dark:bg-slate-950/20 p-5 rounded-2xl border border-slate-100 dark:border-slate-800/80">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-semibold text-slate-500 dark:text-slate-400">Địa chỉ IP:</span>
-                    <span className="font-bold text-slate-700 dark:text-slate-200">{selectedLog.ip || '127.0.0.1'}</span>
+              {(() => {
+                const parseUserAgent = (uaString) => {
+                  if (!uaString || uaString === 'Chưa cập nhật') {
+                    return { os: 'Không rõ', browser: 'Không rõ', engine: 'Không rõ' };
+                  }
+
+                  let os = 'Không rõ';
+                  if (uaString.includes('Windows NT 10.0')) os = 'Windows 10/11';
+                  else if (uaString.includes('Windows NT 6.3')) os = 'Windows 8.1';
+                  else if (uaString.includes('Windows NT 6.2')) os = 'Windows 8';
+                  else if (uaString.includes('Windows NT 6.1')) os = 'Windows 7';
+                  else if (uaString.includes('Macintosh') || uaString.includes('Mac OS X')) os = 'macOS';
+                  else if (uaString.includes('iPhone') || uaString.includes('iPad')) os = 'iOS';
+                  else if (uaString.includes('Android')) os = 'Android';
+                  else if (uaString.includes('Linux')) os = 'Linux';
+
+                  let browser = 'Không rõ';
+                  if (uaString.includes('Edg/')) {
+                    const match = uaString.match(/Edg\/([0-9.]+)/);
+                    browser = `Microsoft Edge ${match ? match[1].split('.')[0] : ''}`;
+                  } else if (uaString.includes('Chrome/')) {
+                    const match = uaString.match(/Chrome\/([0-9.]+)/);
+                    browser = `Google Chrome ${match ? match[1].split('.')[0] : ''}`;
+                  } else if (uaString.includes('Safari/') && uaString.includes('Version/')) {
+                    const match = uaString.match(/Version\/([0-9.]+)/);
+                    browser = `Apple Safari ${match ? match[1].split('.')[0] : ''}`;
+                  } else if (uaString.includes('Firefox/')) {
+                    const match = uaString.match(/Firefox\/([0-9.]+)/);
+                    browser = `Mozilla Firefox ${match ? match[1].split('.')[0] : ''}`;
+                  } else if (uaString.includes('Safari/')) {
+                    browser = 'Apple Safari';
+                  }
+
+                  let engine = 'WebKit / Blink';
+                  if (uaString.includes('Gecko/') && !uaString.includes('WebKit')) {
+                    engine = 'Gecko';
+                  } else if (uaString.includes('Trident/')) {
+                    engine = 'Trident (IE)';
+                  }
+
+                  return { os, browser, engine };
+                };
+
+                const parsed = parseUserAgent(selectedLog.userAgent);
+
+                return (
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Thông tin môi trường</h4>
+                    <div className="space-y-4 bg-slate-50 dark:bg-slate-950/20 p-5 rounded-2xl border border-slate-100 dark:border-slate-800/80">
+                      
+                      {/* IP & Location */}
+                      <div className="grid grid-cols-2 gap-4 text-sm pb-3 border-b border-slate-200/50 dark:border-slate-800/60">
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-0.5">Địa chỉ IP</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-200">{selectedLog.ip || '127.0.0.1'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-0.5">Vị trí</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-200 text-xs line-clamp-1" title={selectedLog.location || 'Địa phương'}>
+                            📍 {selectedLog.location || 'Địa phương'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Structured Browser / OS Badges */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/80 text-center">
+                          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Hệ điều hành</span>
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{parsed.os}</span>
+                        </div>
+                        <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/80 text-center">
+                          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Trình duyệt</span>
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{parsed.browser}</span>
+                        </div>
+                        <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/80 text-center">
+                          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Nhân</span>
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{parsed.engine}</span>
+                        </div>
+                      </div>
+
+                      {/* Collapse/Raw string area */}
+                      <div className="pt-2">
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">User Agent đầy đủ</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono break-all leading-relaxed block bg-white dark:bg-slate-950 p-3 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                          {selectedLog.userAgent || 'Chưa cập nhật'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="font-semibold text-slate-500 dark:text-slate-400">Thiết bị:</span>
-                    <span className="font-bold text-slate-700 dark:text-slate-200">{selectedLog.device}</span>
-                  </div>
-                  <div className="border-t border-slate-100 dark:border-slate-800/80 pt-3">
-                    <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">User Agent đầy đủ</span>
-                    <span className="text-xs text-slate-650 dark:text-slate-400 font-mono break-all leading-relaxed block bg-white dark:bg-slate-950 p-3 rounded-xl border border-slate-200/60 dark:border-slate-800">
-                      {selectedLog.userAgent || 'Chưa cập nhật'}
-                    </span>
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* Payload Diff */}
               <div className="space-y-4">
