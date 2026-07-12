@@ -89,9 +89,12 @@ export function AuthProvider({ children }) {
         throw new Error('Tài khoản của bạn đã bị khóa, vui lòng liên hệ Admin.');
       }
       localStorage.setItem('qm_google_session', 'true');
+      if (user.roles?.length > 1) {
+        return { requiresRoleSelection: true, user };
+      }
       const role = user.roles?.[0] || 'Student';
       completeLogin(user, role);
-      return { requiresRoleSelection: user.roles?.length > 1, user, role };
+      return { requiresRoleSelection: false, user, role };
     } finally {
       isAuthInProgress.current = false;
     }

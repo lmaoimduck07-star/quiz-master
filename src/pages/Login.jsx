@@ -78,11 +78,27 @@ export default function Login() {
   };
 
   // Đăng nhập bằng Google — dùng redirect (ổn định hơn popup trên production)
-  const handleGoogleLogin = () => {
+  // Đăng nhập bằng Google
+  const handleGoogleLogin = async () => {
     setError('');
     setGoogleLoading(true);
-    loginWithGoogleReal(); // trigger redirect, trang sẽ navigate đi
-    // Kết quả được xử lý trong AuthContext khi redirect về
+    try {
+      const result = await loginWithGoogleReal();
+      if (result.requiresRoleSelection) {
+        setPendingUser(result.user);
+        setShowRoleModal(true);
+      } else {
+        if (result.role === 'Admin') {
+          navigate('/admin/dashboard');
+        } else {
+          navigate('/client/dashboard');
+        }
+      }
+    } catch (err) {
+      setError(err.message || 'Đăng nhập Google thất bại!');
+    } finally {
+      setGoogleLoading(false);
+    }
   };
 
   // Hiển thị loading screen khi đang xử lý redirect result
