@@ -68,13 +68,14 @@ export default function AdminDashboard() {
     storage.saveUsers(users);
   }, [users]);
 
-  const addLog = async (category, action, severity) => {
+  const addLog = async (category, action, severity, payload = null) => {
     const newLog = {
       user: currentUser?.username || 'admin',
       role: activeRole || 'Admin',
       category,
       action,
-      severity
+      severity,
+      ...(payload ? { payload } : {})
     };
     await storage.addAuditLog(newLog);
     const updated = await storage.loadAuditLogs();
@@ -283,16 +284,36 @@ export default function AdminDashboard() {
                 users={users}
                 onAddUser={(u) => {
                   setUsers([...users, u]);
-                  addLog('Manager', `Tạo tài khoản mới: ${u.username} (${u.fullName})`, 'Info');
+                  const payload = { newUser: { ...u, password: '***' } };
+                  addLog('Manager', `Tạo tài khoản mới: ${u.username} (${u.fullName})`, 'Info', payload);
                 }}
                 onUpdateUser={(updated) => {
+                  const oldUser = users.find(u => u.id === updated.id);
                   setUsers(users.map(u => u.id === updated.id ? updated : u));
-                  addLog('Manager', `Cập nhật tài khoản: ${updated.username}`, 'Info');
+                  
+                  // So sánh sự khác biệt của permissions nếu có
+                  const oldPerm = oldUser?.permissions || {};
+                  const newPerm = updated.permissions || {};
+                  const permDiffs = [];
+                  
+                  if (oldPerm.codingAccess !== newPerm.codingAccess) {
+                    permDiffs.push(`Coding & Vấn đáp: ${oldPerm.codingAccess ? 'Có' : 'Không'} -> ${newPerm.codingAccess ? 'Có' : 'Không'}`);
+                  }
+                  
+                  const diffText = permDiffs.length > 0 ? ` (Thay đổi quyền: ${permDiffs.join(', ')})` : '';
+                  const payload = {
+                    oldUser: oldUser ? { ...oldUser, password: '***' } : null,
+                    newUser: { ...updated, password: '***' },
+                    changes: permDiffs
+                  };
+                  
+                  addLog('Manager', `Cập nhật tài khoản: ${updated.username}${diffText}`, 'Info', payload);
                 }}
                 onDeleteUser={(id) => {
                   const targetUser = users.find(u => u.id === id);
                   setUsers(users.filter(u => u.id !== id));
-                  addLog('Manager', `Xóa tài khoản: ${targetUser?.username || id}`, 'Critical');
+                  const payload = { deletedUser: targetUser ? { ...targetUser, password: '***' } : null };
+                  addLog('Manager', `Xóa tài khoản: ${targetUser?.username || id}`, 'Critical', payload);
                 }}
               />
             </div>

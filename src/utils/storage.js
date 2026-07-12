@@ -207,6 +207,7 @@ async function addAuditLog(log) {
       timestamp: serverTimestamp(), // dùng để sort
       ip: '127.0.0.1',
       device: navigator.userAgent.includes('Windows') ? 'Chrome - Windows' : 'Mobile - Browser',
+      userAgent: navigator.userAgent,
       ...log
     };
     await addDoc(collection(db, 'auditLogs'), newLog);
