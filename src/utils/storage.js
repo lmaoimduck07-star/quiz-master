@@ -200,12 +200,51 @@ async function loadAuditLogs() {
   }
 }
 
+let cachedUserIp = 'Fetching...';
+
+// Tự động gọi API lấy IP công cộng khi script được load
+try {
+  fetch('https://api.ipify.org?format=json')
+    .then(res => res.json())
+    .then(data => {
+      if (data?.ip) cachedUserIp = data.ip;
+    })
+    .catch(() => {
+      cachedUserIp = '127.0.0.1';
+    });
+} catch (_) {
+  cachedUserIp = '127.0.0.1';
+}
+
 async function addAuditLog(log) {
   try {
+    let finalIp = cachedUserIp;
+    
+    // Nếu chưa fetch kịp thì thử fetch nhanh với timeout 2 giây
+    if (finalIp === 'Fetching...') {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        
+        const res = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
+        clearTimeout(timeoutId);
+        
+        const data = await res.json();
+        if (data?.ip) {
+          finalIp = data.ip;
+          cachedUserIp = data.ip;
+        } else {
+          finalIp = '127.0.0.1';
+        }
+      } catch (_) {
+        finalIp = '127.0.0.1';
+      }
+    }
+
     const newLog = {
       time: new Date().toLocaleString('vi-VN'),
       timestamp: serverTimestamp(), // dùng để sort
-      ip: '127.0.0.1',
+      ip: finalIp,
       device: navigator.userAgent.includes('Windows') ? 'Chrome - Windows' : 'Mobile - Browser',
       userAgent: navigator.userAgent,
       ...log
