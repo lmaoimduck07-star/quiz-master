@@ -20,8 +20,8 @@ export default function PrivateRoute({ children, allowedRoles, requiredPermissio
   if (requiredPermission) {
     const userPermissions = currentUser.permissions || {};
     const hasPermission = userPermissions[requiredPermission] === true;
-    // Admin luôn có quyền truy cập
-    const isAdmin = activeRole === 'Admin';
+    // Admin luôn có quyền truy cập (cho dù đang hoạt động dưới vai trò Học sinh)
+    const isAdmin = activeRole === 'Admin' || currentUser?.roles?.includes('Admin') || currentUser?.role === 'Admin';
 
     if (!hasPermission && !isAdmin) {
       return <AccessDeniedPage requiredPermission={requiredPermission} />;
