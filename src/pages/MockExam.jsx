@@ -6,13 +6,55 @@ import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { AlertTriangle, Clock } from 'lucide-react';
 
+const isSessionExpired = (code) => {
+  if (!code) return false;
+  try {
+    const expired = JSON.parse(localStorage.getItem('qm_expired_sessions') || '[]');
+    return expired.includes(code);
+  } catch {
+    return false;
+  }
+};
+
+const markSessionAsExpired = (code) => {
+  if (!code) return;
+  try {
+    const expired = JSON.parse(localStorage.getItem('qm_expired_sessions') || '[]');
+    if (!expired.includes(code)) {
+      expired.push(code);
+      localStorage.setItem('qm_expired_sessions', JSON.stringify(expired));
+    }
+  } catch (e) {
+    console.error('[Session] Error marking session as expired:', e);
+  }
+};
+
 export default function MockExam() {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser } = useAuth();
-  
-  // Extract state passed from ClientDashboard
-  const examData = location.state || {
+
+  // Load active session from localStorage if it matches current user and examId
+  const savedSession = (() => {
+    try {
+      const sessionStr = localStorage.getItem('qm_active_session');
+      if (sessionStr) {
+        const session = JSON.parse(sessionStr);
+        if (session.userId === currentUser?.id) {
+          // If location.state has a specific examId, verify it matches the saved session
+          if (!location.state || location.state.examId === session.examId) {
+            return session;
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[Session] Error parsing active session:', e);
+    }
+    return null;
+  })();
+
+  // Extract state passed from ClientDashboard or fall back to saved session / default
+  const examData = savedSession?.examData || location.state || {
     examId: 'mock_toan',
     title: 'Đề thi THPT Quốc Gia - Toán học',
     questions: [
@@ -26,16 +68,78 @@ export default function MockExam() {
 
   const { examId, title, questions, timeLimit, mode, subjectName } = examData;
 
-  const [timeLeft, setTimeLeft] = useState(timeLimit);
-  const [answers, setAnswers] = useState({});
+  const [examSessionCode] = useState(() => {
+    return savedSession?.examSessionCode || location.state?.examSessionCode || ('sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9));
+  });
+
+  const [isInvalidSession] = useState(() => {
+    const code = savedSession?.examSessionCode || location.state?.examSessionCode;
+    return isSessionExpired(code);
+  });
+
+  const [timeLeft, setTimeLeft] = useState(() => savedSession ? savedSession.timeLeft : timeLimit);
+  const [answers, setAnswers] = useState(() => savedSession ? savedSession.answers : {});
   const [currentQuestion, setCurrentQuestion] = useState(1);
-  const [warningCount, setWarningCount] = useState(0);
+  const [warningCount, setWarningCount] = useState(() => savedSession ? savedSession.warningCount : 0);
   const [showWarning, setShowWarning] = useState(false);
   const [warningText, setWarningText] = useState('');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  
   const isSubmittedRef = useRef(false);
-  const warningCountRef = useRef(0);
+  const warningCountRef = useRef(savedSession ? savedSession.warningCount : 0);
   const lastWarningTimeRef = useRef(0);
+  const answersRef = useRef(savedSession ? savedSession.answers : {});
+  const timeLeftRef = useRef(savedSession ? savedSession.timeLeft : timeLimit);
+
+  // Sync state to refs to prevent stale closure bugs in anti-cheat event listeners
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
+  useEffect(() => {
+    timeLeftRef.current = timeLeft;
+  }, [timeLeft]);
+
+  // Sync active exam session to localStorage for recovery on page reload
+  useEffect(() => {
+    if (isSubmittedRef.current || isInvalidSession) return;
+    try {
+      const session = {
+        userId: currentUser?.id,
+        examId,
+        examData,
+        answers,
+        timeLeft,
+        warningCount,
+        examSessionCode
+      };
+      localStorage.setItem('qm_active_session', JSON.stringify(session));
+    } catch (e) {
+      console.error('[Session] Error saving active session:', e);
+    }
+  }, [answers, timeLeft, warningCount, currentUser, examId, examData, examSessionCode, isInvalidSession]);
+
+  const isReloadingRef = useRef(false);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      isReloadingRef.current = true;
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      // Nếu rời khỏi trang (không phải do reload) và chưa nộp bài, hủy phiên làm bài thi ngay lập tức
+      if (!isReloadingRef.current && !isSubmittedRef.current && !isInvalidSession) {
+        markSessionAsExpired(examSessionCode);
+        localStorage.removeItem('qm_active_session');
+      }
+    };
+  }, [examSessionCode, isInvalidSession]);
 
   const updateWarningCount = (val) => {
     warningCountRef.current = val;
@@ -157,7 +261,7 @@ export default function MockExam() {
     let correctCount = 0;
     const reviewedQuestions = questions.map((q, index) => {
       const qNum = index + 1;
-      const userAnswer = answers[qNum];
+      const userAnswer = answersRef.current[qNum];
       const qType = q.type || 'single';
       let isCorrect = false;
       let correctAnswer = null;
@@ -221,7 +325,7 @@ export default function MockExam() {
     });
 
     const score = parseFloat(((correctCount / questions.length) * 10).toFixed(1));
-    const timeTaken = timeLimit - timeLeft;
+    const timeTaken = timeLimit - timeLeftRef.current;
 
     // Save exam result to localStorage
     const results = JSON.parse(localStorage.getItem('qm_exam_results') || '[]');
@@ -241,6 +345,11 @@ export default function MockExam() {
     };
     results.unshift(newResult);
     localStorage.setItem('qm_exam_results', JSON.stringify(results));
+    storage.saveExamResult(newResult);
+
+    // Clear active exam session
+    localStorage.removeItem('qm_active_session');
+    markSessionAsExpired(examSessionCode);
 
     // Audit log
     storage.addAuditLog({
@@ -275,6 +384,35 @@ export default function MockExam() {
   };
 
   const isWarningTime = timeLeft < 300;
+
+  if (isInvalidSession) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex items-center justify-center p-4 transition-colors duration-200">
+        <Card className="max-w-md w-full border-none shadow-2xl rounded-3xl overflow-hidden bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 animate-in zoom-in-95 duration-200">
+          <CardContent className="p-8 text-center space-y-6">
+            <div className="w-20 h-20 bg-amber-50 dark:bg-amber-955 border border-amber-200 dark:border-amber-900/50 text-amber-500 dark:text-amber-400 rounded-full flex items-center justify-center mx-auto shadow-sm">
+              <AlertTriangle className="h-10 w-10 animate-bounce text-amber-500" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-black text-slate-800 dark:text-white">Phiên làm bài không hợp lệ</h2>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-semibold leading-relaxed">
+                Phiên làm bài này đã kết thúc hoặc không còn hiệu lực. Hệ thống không cho phép quay lại (Back) hoặc truy cập trực tiếp bài thi đã nộp/đã thoát.
+              </p>
+            </div>
+            
+            <div className="pt-2">
+              <Button 
+                onClick={() => navigate('/client/dashboard')} 
+                className="w-full font-bold h-12 bg-primary hover:bg-primary/90 text-white rounded-xl shadow-md transition duration-150"
+              >
+                Quay lại Trang chủ
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-200">

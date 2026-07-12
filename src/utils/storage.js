@@ -15,9 +15,9 @@ import { db } from '../firebase/config';
 // DỮ LIỆU MẶC ĐỊNH (seed khi Firestore trống)
 // ─────────────────────────────────────────────
 const DEFAULT_USERS = [
-  { id: 'U01', fullName: 'Nguyễn Văn Admin', username: 'admin@edu.vn', password: '12345678', roles: ['Admin', 'Student'], status: 'Active' },
-  { id: 'U02', fullName: 'Trần Học Sinh', username: 'hs_tran', password: '12345678', roles: ['Student'], status: 'Active' },
-  { id: 'U03', fullName: 'Lê Học Sinh', username: 'hs_le', password: '12345678', roles: ['Student'], status: 'Locked' },
+  { id: 'U01', fullName: 'Nguyễn Văn Admin', username: 'admin@edu.vn', password: '12345678', roles: ['Admin', 'Student'], status: 'Active', permissions: { codingAccess: true } },
+  { id: 'U02', fullName: 'Trần Học Sinh', username: 'hs_tran', password: '12345678', roles: ['Student'], status: 'Active', permissions: { codingAccess: false } },
+  { id: 'U03', fullName: 'Lê Học Sinh', username: 'hs_le', password: '12345678', roles: ['Student'], status: 'Locked', permissions: { codingAccess: false } },
 ];
 
 const DEFAULT_SUBJECTS = [

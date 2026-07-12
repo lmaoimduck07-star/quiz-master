@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Save, User, KeyRound, Mail, ShieldAlert } from 'lucide-react';
+import { X, Save, User, KeyRound, Mail, ShieldAlert, Terminal } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 
@@ -12,6 +12,7 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
     password: '12345678', // Default password
     roles: ['Student'],
     status: 'Active',
+    permissions: { codingAccess: false },
   });
 
   useEffect(() => {
@@ -20,7 +21,8 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
         setFormData({ 
           ...initialData, 
           roles: initialData.roles || (initialData.role ? [initialData.role] : ['Student']),
-          password: initialData.password || '12345678'
+          password: initialData.password || '12345678',
+          permissions: initialData.permissions || { codingAccess: false },
         }); 
       } else {
         setFormData({
@@ -30,6 +32,7 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
           password: '12345678',
           roles: ['Student'],
           status: 'Active',
+          permissions: { codingAccess: false },
         });
       }
     }
@@ -62,10 +65,14 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
 
   const handleRoleChange = (role, checked) => {
     if (checked) {
-      setFormData(prev => ({
-        ...prev,
-        roles: [...prev.roles, role]
-      }));
+      setFormData(prev => {
+        const newRoles = [...prev.roles, role];
+        // Nếu thêm Admin → tự động bật codingAccess
+        const newPermissions = role === 'Admin' 
+          ? { ...prev.permissions, codingAccess: true }
+          : prev.permissions;
+        return { ...prev, roles: newRoles, permissions: newPermissions };
+      });
     } else {
       // Đảm bảo không bỏ chọn tất cả
       setFormData(prev => ({
@@ -173,6 +180,38 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
                 * Tài khoản mới mặc định chỉ có quyền Học sinh. Quyền Admin phải được cấp sau bởi quản trị viên khác.
               </p>
             )}
+          </div>
+
+          {/* Quyền tính năng */}
+          <div>
+            <label className="block text-slate-700 dark:text-slate-300 font-bold mb-2 text-sm uppercase tracking-wider flex items-center gap-2 mb-3">
+              <Terminal className="h-4 w-4 text-slate-400" /> Quyền tính năng
+            </label>
+            
+            <div className="space-y-3">
+              <label className={`flex items-center gap-3 p-3 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/40 transition bg-transparent ${formData.roles.includes('Admin') ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                <input 
+                  type="checkbox"
+                  checked={formData.permissions?.codingAccess || formData.roles.includes('Admin') || false}
+                  disabled={formData.roles.includes('Admin')}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    permissions: { ...prev.permissions, codingAccess: e.target.checked }
+                  }))}
+                  className="h-5 w-5 rounded border-slate-300 dark:border-slate-700 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                />
+                <div>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-1.5">
+                    <Terminal className="h-3.5 w-3.5 text-blue-500" /> Thi Lập trình & Vấn đáp AI
+                  </span>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">Cho phép truy cập Cổng thi lập trình tự luận và vấn đáp với Giám khảo AI</p>
+                </div>
+              </label>
+            </div>
+
+            <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-2">
+              * Mặc định tài khoản mới không có quyền. Tài khoản Admin được tự động cấp quyền này.
+            </p>
           </div>
         </div>
 

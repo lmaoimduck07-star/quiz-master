@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Plus, UserCog, UserCheck, UserX, Pencil, Lock, Unlock, Trash2, ChevronDown } from 'lucide-react';
+import { Search, Plus, UserCog, UserCheck, UserX, Pencil, Lock, Unlock, Trash2, ChevronDown, Terminal, ShieldAlert } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Card, CardHeader, CardContent } from '../ui/Card';
@@ -11,6 +11,27 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [deletingUserId, setDeletingUserId] = useState(null);
+
+  // Permission confirmation modal (2FA-style)
+  const [permConfirm, setPermConfirm] = useState(null); // { user, newValue, code }
+  const [permEnteredCode, setPermEnteredCode] = useState('');
+
+  const handleTogglePermission = (user, newValue) => {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setPermConfirm({ user, newValue, code });
+    setPermEnteredCode('');
+  };
+
+  const confirmPermissionChange = () => {
+    if (!permConfirm || permEnteredCode !== permConfirm.code) return;
+    const updated = {
+      ...permConfirm.user,
+      permissions: { ...(permConfirm.user.permissions || {}), codingAccess: permConfirm.newValue }
+    };
+    onUpdateUser(updated);
+    setPermConfirm(null);
+    setPermEnteredCode('');
+  };
 
   // Lọc dữ liệu
   const filteredUsers = users.filter(user => {
@@ -99,12 +120,13 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
-              <thead className="bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-450 font-bold uppercase text-xs tracking-wider border-b border-slate-100 dark:border-slate-800 transition-colors">
+              <thead className="bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 font-bold uppercase text-xs tracking-wider border-b border-slate-100 dark:border-slate-800 transition-colors">
                 <tr>
                   <th className="px-6 py-4">Họ và Tên</th>
                   <th className="px-6 py-4">Tên đăng nhập / Email</th>
                   <th className="px-6 py-4">Mật khẩu</th>
                   <th className="px-6 py-4">Vai trò</th>
+                  <th className="px-6 py-4">Quyền</th>
                   <th className="px-6 py-4">Trạng thái</th>
                   <th className="px-6 py-4 text-right">Thao tác</th>
                 </tr>
@@ -112,7 +134,7 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="px-6 py-12 text-center text-slate-500 dark:text-slate-450 font-medium">
+                    <td colSpan="7" className="px-6 py-12 text-center text-slate-500 dark:text-slate-400 font-medium">
                       Không tìm thấy tài khoản nào khớp với điều kiện tìm kiếm.
                     </td>
                   </tr>
@@ -123,7 +145,7 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
                         <div className="font-bold text-slate-800 dark:text-slate-100">{user.fullName}</div>
                         <div className="text-xs text-slate-400 dark:text-slate-500 font-medium mt-0.5">ID: {user.id}</div>
                       </td>
-                      <td className="px-6 py-4 font-medium text-slate-600 dark:text-slate-350">
+                      <td className="px-6 py-4 font-medium text-slate-600 dark:text-slate-300">
                         {user.username}
                       </td>
                       <td className="px-6 py-4 font-mono font-bold text-sm text-slate-700 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-950/40">
@@ -142,8 +164,22 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
                         </div>
                       </td>
                       <td className="px-6 py-4">
+                        <label className={`inline-flex items-center gap-2 select-none ${(user.roles || []).includes('Admin') ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                          <input 
+                            type="checkbox"
+                            checked={user.permissions?.codingAccess || (user.roles || []).includes('Admin') || false}
+                            disabled={(user.roles || []).includes('Admin')}
+                            onChange={(e) => handleTogglePermission(user, e.target.checked)}
+                            className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                          />
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                            <Terminal className="h-3 w-3 text-blue-500" /> Coding & Vấn đáp
+                          </span>
+                        </label>
+                      </td>
+                      <td className="px-6 py-4">
                         {user.status === 'Active' ? (
-                          <span className="text-emerald-600 dark:text-emerald-450 font-bold text-sm flex items-center gap-1">
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold text-sm flex items-center gap-1">
                             <UserCheck className="h-4 w-4" /> Hoạt động
                           </span>
                         ) : (
@@ -208,17 +244,90 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
                 <Trash2 className="h-8 w-8" />
               </div>
               <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Xóa tài khoản?</h3>
-              <p className="text-slate-500 dark:text-slate-450 mb-8 text-sm">
+              <p className="text-slate-500 dark:text-slate-400 mb-8 text-sm">
                 Bạn có chắc chắn muốn xóa tài khoản này vĩnh viễn không? Hành động này không thể hoàn tác.
               </p>
               <div className="flex gap-3 justify-center">
-                <Button variant="outline" onClick={() => setDeletingUserId(null)} className="w-full font-bold border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-350 bg-transparent">
+                <Button variant="outline" onClick={() => setDeletingUserId(null)} className="w-full font-bold border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 bg-transparent">
                   Hủy Bỏ
                 </Button>
                 <Button variant="danger" onClick={confirmDelete} className="w-full font-bold bg-red-500 hover:bg-red-600 border-transparent">
                   Xóa Vĩnh Viễn
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Permission Confirmation Modal (2FA) */}
+      {permConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 max-w-md w-full rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="bg-slate-50 dark:bg-slate-950/40 px-8 py-5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+              <h2 className="text-lg font-black text-slate-800 dark:text-white m-0 flex items-center gap-2">
+                <ShieldAlert className="h-5 w-5 text-amber-500 animate-pulse" />
+                Xác nhận thay đổi quyền
+              </h2>
+              <button onClick={() => setPermConfirm(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition bg-transparent">
+                <Trash2 className="h-5 w-5" style={{ display: 'none' }} />
+                <span className="text-xl font-bold">✕</span>
+              </button>
+            </div>
+
+            <div className="p-8 space-y-5">
+              <div className={`p-4 rounded-2xl text-sm font-semibold leading-relaxed border ${permConfirm.newValue ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/40 text-blue-800 dark:text-blue-300' : 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-300'}`}>
+                {permConfirm.newValue 
+                  ? <>🔓 Bạn đang <strong>CẤP QUYỀN</strong> Thi Lập trình &amp; Vấn đáp AI cho tài khoản <strong>{permConfirm.user.fullName}</strong> ({permConfirm.user.username}).</>
+                  : <>🔒 Bạn đang <strong>THU HỒI QUYỀN</strong> Thi Lập trình &amp; Vấn đáp AI của tài khoản <strong>{permConfirm.user.fullName}</strong> ({permConfirm.user.username}).</>
+                }
+              </div>
+
+              <p className="text-slate-600 dark:text-slate-300 text-sm font-semibold">
+                Để xác nhận, vui lòng nhập mã xác minh bên dưới:
+              </p>
+
+              <div className="flex gap-4 items-center bg-slate-50 dark:bg-slate-800/40 p-4 border border-slate-200 dark:border-slate-800 rounded-2xl">
+                <div className="flex-1 space-y-1">
+                  <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Nhập mã xác nhận</label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    placeholder="Mã 6 số..."
+                    value={permEnteredCode}
+                    onChange={(e) => setPermEnteredCode(e.target.value.replace(/\D/g, ''))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && permEnteredCode === permConfirm.code) {
+                        e.preventDefault();
+                        confirmPermissionChange();
+                      }
+                    }}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-lg font-black tracking-widest text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary text-center"
+                    autoFocus
+                  />
+                </div>
+                <div className="text-center bg-slate-900 dark:bg-slate-950 text-white rounded-2xl px-5 py-3 shadow-md border border-slate-800">
+                  <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Mã xác minh</div>
+                  <div className="text-2xl font-black tracking-widest text-emerald-400 font-mono select-none">{permConfirm.code}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-950/40 px-8 py-5 border-t border-slate-200 dark:border-slate-800 flex gap-3 justify-end">
+              <Button
+                variant="ghost"
+                onClick={() => setPermConfirm(null)}
+                className="rounded-xl font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 bg-transparent"
+              >
+                Hủy bỏ
+              </Button>
+              <Button
+                onClick={confirmPermissionChange}
+                disabled={permEnteredCode !== permConfirm.code}
+                className={`rounded-xl font-bold px-6 shadow-sm disabled:opacity-50 ${permConfirm.newValue ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-amber-600 hover:bg-amber-700 text-white'}`}
+              >
+                {permConfirm.newValue ? 'Xác nhận cấp quyền' : 'Xác nhận thu hồi'}
+              </Button>
             </div>
           </div>
         </div>

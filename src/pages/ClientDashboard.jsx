@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { storage } from '../utils/storage';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { BookOpen, Clock, LogOut, ShieldAlert, Award, FileText, ChevronRight, Play, X, Sun, Moon, Award as AwardIcon, TrendingUp, Calendar, AlertTriangle } from 'lucide-react';
+import { BookOpen, Clock, LogOut, ShieldAlert, Award, FileText, ChevronRight, Play, X, Sun, Moon, Award as AwardIcon, TrendingUp, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 
 export default function ClientDashboard() {
   const navigate = useNavigate();
@@ -17,9 +17,26 @@ export default function ClientDashboard() {
   const [simSubject, setSimSubject] = useState(null);
   const [verificationCode, setVerificationCode] = useState('');
   const [enteredCode, setEnteredCode] = useState('');
+  const [isEnteringCoding, setIsEnteringCoding] = useState(false);
+  const [codingStep, setCodingStep] = useState(0);
+
+  const handleEnterCoding = () => {
+    setIsEnteringCoding(true);
+    setCodingStep(0);
+    
+    setTimeout(() => setCodingStep(1), 800);
+    setTimeout(() => setCodingStep(2), 1600);
+    setTimeout(() => {
+      setIsEnteringCoding(false);
+      navigate('/coding/dashboard');
+    }, 2400);
+  };
 
   // Load subjects từ Firestore
   useEffect(() => {
+    // Khi quay lại dashboard, đóng và xoá phiên làm bài cũ (nếu có) để lượt thi sau là mới hoàn toàn
+    localStorage.removeItem('qm_active_session');
+
     storage.loadSubjects().then(data => {
       setSubjects(data.filter(s => s.isActive !== false));
     });
@@ -65,7 +82,8 @@ export default function ClientDashboard() {
         questions: exam.questions,
         timeLimit: (exam.questions.length * 1.5) * 60, // 1.5 phút mỗi câu cho đề luyện tập
         mode: 'practice',
-        subjectName: subject.name
+        subjectName: subject.name,
+        examSessionCode: 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
       }
     });
   };
@@ -125,7 +143,8 @@ export default function ClientDashboard() {
         questions: simulationQuestions,
         timeLimit: 50 * 60, // 50 phút
         mode: 'simulation',
-        subjectName: simSubject.name
+        subjectName: simSubject.name,
+        examSessionCode: 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
       }
     });
   };
@@ -134,6 +153,35 @@ export default function ClientDashboard() {
     setSelectedSubject(subject);
     setShowPracticeModal(true);
   };
+
+  if (isEnteringCoding) {
+    const steps = [
+      "Đang tải phân hệ thi lập trình...",
+      "Đang xác thực thông tin tài khoản học sinh...",
+      "Thiết lập cổng kết nối bảo mật hoàn tất. Đang chuyển hướng..."
+    ];
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 font-sans transition-colors duration-200">
+        <Card className="max-w-md w-full border-slate-800 bg-slate-900 shadow-2xl rounded-3xl overflow-hidden animate-in fade-in duration-300">
+          <CardContent className="p-8 space-y-6 text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-blue-500 mx-auto" />
+            <div className="space-y-2">
+              <h2 className="text-xl font-black text-white">Chuyển sang Cổng lập trình</h2>
+              <p className="text-slate-400 text-sm font-semibold h-6 leading-relaxed">
+                {steps[codingStep]}
+              </p>
+            </div>
+            <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-800 animate-pulse">
+              <div 
+                className="bg-blue-600 h-full rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${((codingStep + 1) / 3) * 100}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-950 dark:text-slate-50 flex flex-col transition-colors duration-200">
@@ -204,6 +252,40 @@ export default function ClientDashboard() {
             </div>
           </div>
         </div>
+        {/* Phân hệ thi lập trình tự luận */}
+        {(() => {
+          const hasCodingPermission = currentUser?.permissions?.codingAccess === true;
+          return (
+            <div className={`p-8 rounded-3xl text-white shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6 transition-all ${
+              hasCodingPermission 
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-900 dark:to-indigo-950' 
+                : 'bg-gradient-to-r from-slate-500 to-slate-600 dark:from-slate-800 dark:to-slate-900'
+            }`}>
+              <div>
+                <h2 className="text-2xl font-black mb-2 flex items-center gap-2">Phân hệ Thi Lập trình & Vấn đáp AI 🤖</h2>
+                <p className={`text-sm font-medium ${hasCodingPermission ? 'text-blue-100' : 'text-slate-300'}`}>
+                  Môi trường thi lập trình tự luận trực tuyến, chấm điểm testcases tự động và hỏi đáp trực tiếp 1:1 với Giám khảo AI.
+                </p>
+                {!hasCodingPermission && (
+                  <p className="mt-2 text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                    🔒 Bạn chưa được cấp quyền truy cập. Vui lòng liên hệ Admin để được cấp quyền.
+                  </p>
+                )}
+              </div>
+              <Button 
+                onClick={handleEnterCoding}
+                disabled={!hasCodingPermission}
+                className={`w-full md:w-auto font-bold h-12 px-6 rounded-xl shadow-md shrink-0 border-transparent ${
+                  hasCodingPermission 
+                    ? 'bg-white hover:bg-slate-50 text-blue-600' 
+                    : 'bg-white/20 text-white/60 cursor-not-allowed'
+                }`}
+              >
+                {hasCodingPermission ? 'Vào Cổng thi Lập trình' : '🔒 Chưa có quyền truy cập'}
+              </Button>
+            </div>
+          );
+        })()}
 
         {/* Môn học đang mở */}
         <div>

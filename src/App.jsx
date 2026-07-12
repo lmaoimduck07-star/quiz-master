@@ -5,6 +5,10 @@ import ClientDashboard from "./pages/ClientDashboard";
 import PracticeReview from "./pages/PracticeReview";
 import MockExam from "./pages/MockExam";
 import AdminDashboard from "./pages/AdminDashboard";
+import CodingDashboard from "./pages/coding/CodingDashboard";
+import CodingWorkspace from "./pages/coding/CodingWorkspace";
+import CodingViva from "./pages/coding/CodingViva";
+import CodingReview from "./pages/coding/CodingReview";
 import { AuthProvider } from "./context/AuthContext";
 import PrivateRoute from "./components/PrivateRoute";
 
@@ -45,6 +49,38 @@ function App() {
             element={
               <PrivateRoute allowedRoles={['Admin']}>
                 <AdminDashboard />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/coding/dashboard" 
+            element={
+              <PrivateRoute allowedRoles={['Student', 'Admin']} requiredPermission="codingAccess">
+                <CodingDashboard />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/coding/workspace" 
+            element={
+              <PrivateRoute allowedRoles={['Student', 'Admin']} requiredPermission="codingAccess">
+                <CodingWorkspace />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/coding/viva" 
+            element={
+              <PrivateRoute allowedRoles={['Student', 'Admin']} requiredPermission="codingAccess">
+                <CodingViva />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/coding/review" 
+            element={
+              <PrivateRoute allowedRoles={['Student', 'Admin']} requiredPermission="codingExam">
+                <CodingReview />
               </PrivateRoute>
             } 
           />
