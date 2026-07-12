@@ -227,17 +227,21 @@ const getLocalIpHelper = () => {
         if (!ice || !ice.candidate || !ice.candidate.candidate) return;
         const parts = ice.candidate.candidate.split(' ');
         const ip = parts[4];
-        if (ip && (ip.includes('.') || ip.includes(':')) && !ip.endsWith('.local')) {
-          resolve(ip);
+        if (ip && (ip.includes('.') || ip.includes(':'))) {
+          if (ip.endsWith('.local')) {
+            resolve('Ẩn (mDNS Security)');
+          } else {
+            resolve(ip);
+          }
           pc.close();
         }
       };
       setTimeout(() => {
         pc.close();
-        resolve('Không rõ (mDNS/Chặn)');
+        resolve('Ẩn (mDNS Security)');
       }, 1000);
     } catch (_) {
-      resolve('Bị chặn');
+      resolve('Bị chặn bởi trình duyệt');
     }
   });
 };
@@ -246,15 +250,67 @@ getLocalIpHelper().then(ip => {
   cachedIpInfo.localIp = ip;
 });
 
-// 2. Lấy Public IPv4
-fetch('https://api.ipify.org?format=json')
-  .then(res => res.json())
-  .then(data => {
-    if (data?.ip) cachedIpInfo.publicIpv4 = data.ip;
-  })
-  .catch(() => {
-    cachedIpInfo.publicIpv4 = '127.0.0.1';
-  });
+// 2. Chuỗi gọi API lấy Vị trí địa lý và IP nâng cao (thử tuần tự để tránh lỗi)
+const fetchLocationInfo = async () => {
+  // Thử API 1: ipwho.is (Rất nhanh, hỗ trợ CORS và HTTPS tốt)
+  try {
+    const res = await fetch('https://ipwho.is/');
+    const data = await res.json();
+    if (data && data.success) {
+      cachedIpInfo.publicIpv4 = data.ip;
+      cachedLocInfo = {
+        cityName: data.city || '',
+        regionName: data.region || '',
+        countryName: data.country || '',
+        zipCode: data.postal || '',
+        latitude: data.latitude || null,
+        longitude: data.longitude || null,
+        timeZone: data.timezone?.id || ''
+      };
+      return;
+    }
+  } catch (_) {}
+
+  // Thử API 2: ipapi.co (Fallback 1)
+  try {
+    const res = await fetch('https://ipapi.co/json/');
+    const data = await res.json();
+    if (data && !data.error) {
+      cachedIpInfo.publicIpv4 = data.ip;
+      cachedLocInfo = {
+        cityName: data.city || '',
+        regionName: data.region || '',
+        countryName: data.country_name || '',
+        zipCode: data.postal || '',
+        latitude: data.latitude || null,
+        longitude: data.longitude || null,
+        timeZone: data.timezone || ''
+      };
+      return;
+    }
+  } catch (_) {}
+
+  // Thử API 3: freeipapi.com (Fallback 2)
+  try {
+    const res = await fetch('https://freeipapi.com/api/json');
+    const data = await res.json();
+    if (data) {
+      cachedIpInfo.publicIpv4 = data.ipAddress || '127.0.0.1';
+      cachedLocInfo = {
+        cityName: data.cityName || '',
+        regionName: data.regionName || '',
+        countryName: data.countryName || '',
+        zipCode: data.zipCode || '',
+        latitude: data.latitude || null,
+        longitude: data.longitude || null,
+        timeZone: data.timeZone || ''
+      };
+      return;
+    }
+  } catch (_) {}
+};
+
+fetchLocationInfo();
 
 // 3. Lấy Public IPv6 (api64.ipify.org trả về IPv6 nếu có, ngược lại trả về IPv4)
 fetch('https://api64.ipify.org?format=json')
@@ -267,24 +323,6 @@ fetch('https://api64.ipify.org?format=json')
   .catch(() => {
     cachedIpInfo.publicIpv6 = 'Không hỗ trợ IPv6';
   });
-
-// 4. Lấy thông tin vị trí địa lý chi tiết
-fetch('https://freeipapi.com/api/json')
-  .then(res => res.json())
-  .then(data => {
-    if (data) {
-      cachedLocInfo = {
-        cityName: data.cityName || '',
-        regionName: data.regionName || '',
-        countryName: data.countryName || '',
-        zipCode: data.zipCode || '',
-        latitude: data.latitude || null,
-        longitude: data.longitude || null,
-        timeZone: data.timeZone || ''
-      };
-    }
-  })
-  .catch(() => {});
 
 async function addAuditLog(log) {
   try {
