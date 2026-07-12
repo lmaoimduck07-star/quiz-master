@@ -254,7 +254,8 @@ export default function ClientDashboard() {
         </div>
         {/* Phân hệ thi lập trình tự luận */}
         {(() => {
-          const hasCodingPermission = currentUser?.permissions?.codingAccess === true;
+          const isAdmin = currentUser?.roles?.includes('Admin') || currentUser?.role === 'Admin';
+          const hasCodingPermission = currentUser?.permissions?.codingAccess === true || isAdmin;
           return (
             <div className={`p-8 rounded-3xl text-white shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6 transition-all ${
               hasCodingPermission 
