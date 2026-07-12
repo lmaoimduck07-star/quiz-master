@@ -200,67 +200,116 @@ async function loadAuditLogs() {
   }
 }
 
-let cachedUserIp = 'Fetching...';
-let cachedUserLoc = 'Địa phương';
+let cachedIpInfo = {
+  publicIpv4: 'Fetching...',
+  publicIpv6: 'Fetching...',
+  localIp: 'Fetching...'
+};
 
-// Tự động gọi API lấy IP công cộng và vị trí khi script được load
-try {
-  fetch('https://freeipapi.com/api/json')
-    .then(res => res.json())
-    .then(data => {
-      if (data?.ipAddress) {
-        cachedUserIp = data.ipAddress;
-        const locParts = [data.cityName, data.regionName, data.countryName].filter(Boolean);
-        cachedUserLoc = locParts.length > 0 ? locParts.join(', ') : 'Không rõ';
-      }
-    })
-    .catch(() => {
-      cachedUserIp = '127.0.0.1';
-      cachedUserLoc = 'Địa phương';
-    });
-} catch (_) {
-  cachedUserIp = '127.0.0.1';
-  cachedUserLoc = 'Địa phương';
-}
+let cachedLocInfo = {
+  cityName: '',
+  regionName: '',
+  countryName: '',
+  zipCode: '',
+  latitude: null,
+  longitude: null,
+  timeZone: ''
+};
+
+// 1. Lấy IP cục bộ (Local IP) qua WebRTC leak
+const getLocalIpHelper = () => {
+  return new Promise((resolve) => {
+    try {
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      pc.createDataChannel('');
+      pc.createOffer().then(offer => pc.setLocalDescription(offer)).catch(() => {});
+      pc.onicecandidate = (ice) => {
+        if (!ice || !ice.candidate || !ice.candidate.candidate) return;
+        const parts = ice.candidate.candidate.split(' ');
+        const ip = parts[4];
+        if (ip && (ip.includes('.') || ip.includes(':')) && !ip.endsWith('.local')) {
+          resolve(ip);
+          pc.close();
+        }
+      };
+      setTimeout(() => {
+        pc.close();
+        resolve('Không rõ (mDNS/Chặn)');
+      }, 1000);
+    } catch (_) {
+      resolve('Bị chặn');
+    }
+  });
+};
+
+getLocalIpHelper().then(ip => {
+  cachedIpInfo.localIp = ip;
+});
+
+// 2. Lấy Public IPv4
+fetch('https://api.ipify.org?format=json')
+  .then(res => res.json())
+  .then(data => {
+    if (data?.ip) cachedIpInfo.publicIpv4 = data.ip;
+  })
+  .catch(() => {
+    cachedIpInfo.publicIpv4 = '127.0.0.1';
+  });
+
+// 3. Lấy Public IPv6 (api64.ipify.org trả về IPv6 nếu có, ngược lại trả về IPv4)
+fetch('https://api64.ipify.org?format=json')
+  .then(res => res.json())
+  .then(data => {
+    if (data?.ip) {
+      cachedIpInfo.publicIpv6 = data.ip.includes(':') ? data.ip : 'Không hỗ trợ IPv6';
+    }
+  })
+  .catch(() => {
+    cachedIpInfo.publicIpv6 = 'Không hỗ trợ IPv6';
+  });
+
+// 4. Lấy thông tin vị trí địa lý chi tiết
+fetch('https://freeipapi.com/api/json')
+  .then(res => res.json())
+  .then(data => {
+    if (data) {
+      cachedLocInfo = {
+        cityName: data.cityName || '',
+        regionName: data.regionName || '',
+        countryName: data.countryName || '',
+        zipCode: data.zipCode || '',
+        latitude: data.latitude || null,
+        longitude: data.longitude || null,
+        timeZone: data.timeZone || ''
+      };
+    }
+  })
+  .catch(() => {});
 
 async function addAuditLog(log) {
   try {
-    let finalIp = cachedUserIp;
-    let finalLoc = cachedUserLoc;
-    
-    // Nếu chưa fetch kịp thì thử fetch nhanh với timeout 2 giây
-    if (finalIp === 'Fetching...') {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
-        
-        const res = await fetch('https://freeipapi.com/api/json', { signal: controller.signal });
-        clearTimeout(timeoutId);
-        
-        const data = await res.json();
-        if (data?.ipAddress) {
-          finalIp = data.ipAddress;
-          const locParts = [data.cityName, data.regionName, data.countryName].filter(Boolean);
-          finalLoc = locParts.length > 0 ? locParts.join(', ') : 'Không rõ';
-          cachedUserIp = data.ipAddress;
-          cachedUserLoc = finalLoc;
-        } else {
-          finalIp = '127.0.0.1';
-          finalLoc = 'Địa phương';
-        }
-      } catch (_) {
-        finalIp = '127.0.0.1';
-        finalLoc = 'Địa phương';
-      }
+    // Đợi tối đa 1.5 giây để đảm bảo có IP và Vị trí nếu là lần chạy đầu tiên
+    if (cachedIpInfo.publicIpv4 === 'Fetching...' || cachedLocInfo.cityName === '') {
+      await new Promise(resolve => setTimeout(resolve, 1500));
     }
+
+    const flatLocParts = [cachedLocInfo.cityName, cachedLocInfo.regionName, cachedLocInfo.countryName].filter(Boolean);
+    const flatLocation = flatLocParts.length > 0 ? flatLocParts.join(', ') : 'Địa phương';
 
     const newLog = {
       time: new Date().toLocaleString('vi-VN'),
       timestamp: serverTimestamp(), // dùng để sort
-      ip: finalIp,
-      location: finalLoc,
+      ip: cachedIpInfo.publicIpv4 !== 'Fetching...' ? cachedIpInfo.publicIpv4 : '127.0.0.1',
+      location: flatLocation,
       device: navigator.userAgent.includes('Windows') ? 'Chrome - Windows' : 'Mobile - Browser',
       userAgent: navigator.userAgent,
+      // Thêm thông tin cấu trúc nâng cao để hiển thị chi tiết
+      ipInfo: {
+        publicIpv4: cachedIpInfo.publicIpv4,
+        publicIpv6: cachedIpInfo.publicIpv6,
+        localIp: cachedIpInfo.localIp
+      },
+      locationInfo: { ...cachedLocInfo },
       ...log
     };
     await addDoc(collection(db, 'auditLogs'), newLog);

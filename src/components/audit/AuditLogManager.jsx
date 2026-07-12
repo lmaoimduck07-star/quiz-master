@@ -250,17 +250,60 @@ export default function AuditLogManager({ logs }) {
                     <div className="space-y-4 bg-slate-50 dark:bg-slate-950/20 p-5 rounded-2xl border border-slate-100 dark:border-slate-800/80">
                       
                       {/* IP & Location */}
-                      <div className="grid grid-cols-2 gap-4 text-sm pb-3 border-b border-slate-200/50 dark:border-slate-800/60">
-                        <div>
-                          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-0.5">Địa chỉ IP</span>
-                          <span className="font-bold text-slate-700 dark:text-slate-200">{selectedLog.ip || '127.0.0.1'}</span>
+                      <div className="space-y-3 pb-3 border-b border-slate-200/50 dark:border-slate-800/60 text-sm">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-0.5">Địa chỉ IPv4</span>
+                            <span className="font-bold text-slate-700 dark:text-slate-200 font-mono text-xs">
+                              {selectedLog.ipInfo?.publicIpv4 || selectedLog.ip || '127.0.0.1'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-0.5">Địa chỉ IPv6</span>
+                            <span className="font-bold text-slate-700 dark:text-slate-200 font-mono text-xs break-all">
+                              {selectedLog.ipInfo?.publicIpv6 || 'Không hỗ trợ'}
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-0.5">Vị trí</span>
-                          <span className="font-bold text-slate-700 dark:text-slate-200 text-xs line-clamp-1" title={selectedLog.location || 'Địa phương'}>
-                            📍 {selectedLog.location || 'Địa phương'}
-                          </span>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-0.5">IP Nội bộ (Local)</span>
+                            <span className="font-bold text-slate-700 dark:text-slate-200 font-mono text-xs">
+                              {selectedLog.ipInfo?.localIp || 'Không rõ'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-0.5">Vị trí địa lý</span>
+                            <span className="font-bold text-slate-700 dark:text-slate-200 text-xs line-clamp-1" title={selectedLog.location || 'Địa phương'}>
+                              📍 {selectedLog.location || 'Địa phương'}
+                            </span>
+                          </div>
                         </div>
+
+                        {selectedLog.locationInfo && selectedLog.locationInfo.cityName && (
+                          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/40">
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-0.5">Múi giờ & ZIP</span>
+                              <span className="font-bold text-slate-600 dark:text-slate-300 text-xs">
+                                {selectedLog.locationInfo.timeZone} {selectedLog.locationInfo.zipCode ? `(ZIP: ${selectedLog.locationInfo.zipCode})` : ''}
+                              </span>
+                            </div>
+                            {selectedLog.locationInfo.latitude && selectedLog.locationInfo.longitude && (
+                              <div>
+                                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-0.5">Tọa độ vệ tinh</span>
+                                <a 
+                                  href={`https://www.openstreetmap.org/?mlat=${selectedLog.locationInfo.latitude}&mlon=${selectedLog.locationInfo.longitude}#map=12/${selectedLog.locationInfo.latitude}/${selectedLog.locationInfo.longitude}`}
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-xs font-bold text-blue-500 hover:text-blue-600 hover:underline flex items-center gap-1"
+                                >
+                                  🌐 {selectedLog.locationInfo.latitude.toFixed(4)}, {selectedLog.locationInfo.longitude.toFixed(4)}
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Structured Browser / OS Badges */}
