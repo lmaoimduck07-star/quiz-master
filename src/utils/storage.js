@@ -267,11 +267,32 @@ const fetchLocationInfo = async () => {
         longitude: data.longitude || null,
         timeZone: data.timezone?.id || ''
       };
+      console.log('[Storage] IP & Geolocation initialized via ipwho.is:', cachedIpInfo.publicIpv4, cachedLocInfo);
       return;
     }
   } catch (_) {}
 
-  // Thử API 2: ipapi.co (Fallback 1)
+  // Thử API 2: geolocation-db.com (Không giới hạn, rất tin cậy ở Việt Nam)
+  try {
+    const res = await fetch('https://geolocation-db.com/json/');
+    const data = await res.json();
+    if (data && data.IPv4) {
+      cachedIpInfo.publicIpv4 = data.IPv4;
+      cachedLocInfo = {
+        cityName: data.city || '',
+        regionName: data.state || '',
+        countryName: data.country_name || '',
+        zipCode: data.postal || '',
+        latitude: data.latitude || null,
+        longitude: data.longitude || null,
+        timeZone: ''
+      };
+      console.log('[Storage] IP & Geolocation initialized via geolocation-db:', cachedIpInfo.publicIpv4, cachedLocInfo);
+      return;
+    }
+  } catch (_) {}
+
+  // Thử API 3: ipapi.co (Fallback 2)
   try {
     const res = await fetch('https://ipapi.co/json/');
     const data = await res.json();
@@ -286,11 +307,12 @@ const fetchLocationInfo = async () => {
         longitude: data.longitude || null,
         timeZone: data.timezone || ''
       };
+      console.log('[Storage] IP & Geolocation initialized via ipapi.co:', cachedIpInfo.publicIpv4, cachedLocInfo);
       return;
     }
   } catch (_) {}
 
-  // Thử API 3: freeipapi.com (Fallback 2)
+  // Thử API 4: freeipapi.com (Fallback 3)
   try {
     const res = await fetch('https://freeipapi.com/api/json');
     const data = await res.json();
@@ -305,9 +327,42 @@ const fetchLocationInfo = async () => {
         longitude: data.longitude || null,
         timeZone: data.timeZone || ''
       };
+      console.log('[Storage] IP & Geolocation initialized via freeipapi.com:', cachedIpInfo.publicIpv4, cachedLocInfo);
       return;
     }
   } catch (_) {}
+
+  // Thử API 5: Cloudflare trace (Ultimate fallback - Không thể bị chặn)
+  try {
+    const res = await fetch('https://www.cloudflare.com/cdn-cgi/trace');
+    const text = await res.text();
+    const lines = text.split('\n');
+    const traceInfo = {};
+    lines.forEach(line => {
+      const parts = line.split('=');
+      if (parts.length === 2) {
+        traceInfo[parts[0].trim()] = parts[1].trim();
+      }
+    });
+
+    if (traceInfo.ip) {
+      cachedIpInfo.publicIpv4 = traceInfo.ip;
+      const countryNames = { 'VN': 'Việt Nam', 'US': 'Hoa Kỳ', 'SG': 'Singapore', 'JP': 'Nhật Bản' };
+      cachedLocInfo = {
+        cityName: 'Truy cập qua Cloudflare CDN',
+        regionName: '',
+        countryName: countryNames[traceInfo.loc] || traceInfo.loc || 'Việt Nam',
+        zipCode: '',
+        latitude: null,
+        longitude: null,
+        timeZone: ''
+      };
+      console.log('[Storage] IP & Country initialized via Cloudflare Trace:', cachedIpInfo.publicIpv4, cachedLocInfo);
+      return;
+    }
+  } catch (_) {}
+
+  console.warn('[Storage] All Geolocation APIs failed. Fallback to local network defaults.');
 };
 
 fetchLocationInfo();
