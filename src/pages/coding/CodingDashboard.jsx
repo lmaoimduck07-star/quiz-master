@@ -1,140 +1,17 @@
 // src/pages/coding/CodingDashboard.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent } from '../../components/ui/Card';
 import { BookOpen, LogOut, Terminal, ArrowLeft, Key, Code2, Sparkles, CheckCircle2, X, ChevronDown } from 'lucide-react';
 import { hasGeminiApiKey, saveGeminiApiKey } from '../../utils/gemini';
 import { getSession, createSession, clearSession, getSessionRedirectPath } from '../../utils/codingSession';
-
-const MOCK_PROBLEMS = [
-  {
-    id: 'two_sum',
-    title: 'Two Sum - Tìm cặp số',
-    difficulty: 'Dễ',
-    category: 'Mảng & Hashtable',
-    description: `Cho một mảng số nguyên <code>nums</code> và một số nguyên <code>target</code>, hãy viết hàm trả về chỉ số (index) của hai số sao cho tổng của chúng bằng đúng <code>target</code>.
-    <br/><br/>
-    Bạn có thể giả định rằng mỗi đầu vào sẽ có <b>đúng một giải pháp</b>, và bạn không được sử dụng cùng một phần tử hai lần.`,
-    templates: {
-      javascript: `function twoSum(nums, target) {
-  // Viết code Javascript ở đây
-  
-}`,
-      python: `def twoSum(nums: list[int], target: int) -> list[int]:
-    # Viết code Python ở đây
-    pass`,
-      cpp: `#include <vector>
-using namespace std;
-
-vector<int> twoSum(vector<int>& nums, int target) {
-    // Viết code C++ ở đây
-    
-}`,
-      c: `int* twoSum(int* nums, int numsSize, int target, int* returnSize) {
-    // Viết code C ở đây
-    
-}`,
-      java: `import java.util.*;
-
-class Solution {
-    public int[] twoSum(int[] nums, int target) {
-        // Viết code Java ở đây
-        
-    }
-}`
-    },
-    testCases: [
-      { input: '[[2, 7, 11, 15], 9]', output: '[0,1]', args: [[2, 7, 11, 15], 9] },
-      { input: '[[3, 2, 4], 6]', output: '[1,2]', args: [[3, 2, 4], 6] },
-      { input: '[[3, 3], 6]', output: '[0,1]', args: [[3, 3], 6] }
-    ]
-  },
-  {
-    id: 'prime_check',
-    title: 'Kiểm tra số nguyên tố',
-    difficulty: 'Dễ',
-    category: 'Toán học & Logic',
-    description: `Viết hàm nhận vào một số nguyên dương <code>n</code>. Trả về <code>true</code> nếu <code>n</code> là số nguyên tố, ngược lại trả về <code>false</code>.
-    <br/><br/>
-    Số nguyên tố là số lớn hơn 1 và chỉ chia hết cho 1 và chính nó.`,
-    templates: {
-      javascript: `function isPrime(n) {
-  // Viết code Javascript ở đây
-  
-}`,
-      python: `def isPrime(n: int) -> bool:
-    # Viết code Python ở đây
-    pass`,
-      cpp: `bool isPrime(int n) {
-    // Viết code C++ ở đây
-    
-}`,
-      c: `#include <stdbool.h>
-
-bool isPrime(int n) {
-    // Viết code C ở đây
-    
-}`,
-      java: `class Solution {
-    public boolean isPrime(int n) {
-        // Viết code Java ở đây
-        
-    }
-}`
-    },
-    testCases: [
-      { input: '[4]', output: 'false', args: [4] },
-      { input: '[17]', output: 'true', args: [17] },
-      { input: '[1]', output: 'false', args: [1] },
-      { input: '[2]', output: 'true', args: [2] }
-    ]
-  },
-  {
-    id: 'longest_word',
-    title: 'Tìm từ dài nhất',
-    difficulty: 'Trung bình',
-    category: 'Chuỗi (String)',
-    description: `Viết hàm nhận vào một câu tiếng Anh <code>str</code>. Tìm từ dài nhất trong câu đó và trả về <b>độ dài</b> của từ đó.
-    <br/><br/>
-    Các từ được ngăn cách bởi dấu cách và bỏ qua các dấu câu cơ bản.`,
-    templates: {
-      javascript: `function findLongestWordLength(str) {
-  // Viết code Javascript ở đây
-  
-}`,
-      python: `def findLongestWordLength(str: str) -> int:
-    # Viết code Python ở đây
-    pass`,
-      cpp: `#include <string>
-using namespace std;
-
-int findLongestWordLength(string str) {
-    // Viết code C++ ở đây
-    
-}`,
-      c: `int findLongestWordLength(char* str) {
-    // Viết code C ở đây
-    
-}`,
-      java: `class Solution {
-    public int findLongestWordLength(String str) {
-        // Viết code Java ở đây
-        
-    }
-}`
-    },
-    testCases: [
-      { input: '["The quick brown fox jumped over the lazy dog"]', output: '6', args: ["The quick brown fox jumped over the lazy dog"] },
-      { input: '["Hello World"]', output: '5', args: ["Hello World"] },
-      { input: '["Coding is absolutely awesome"]', output: '10', args: ["Coding is absolutely awesome"] }
-    ]
-  }
-];
+import { storage } from '../../utils/storage';
 
 export default function CodingDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentUser, logout } = useAuth();
   const [apiKey, setApiKey] = useState('');
   const [hasKey, setHasKey] = useState(false);
@@ -143,6 +20,9 @@ export default function CodingDashboard() {
   const [selectedProblem, setSelectedProblem] = useState(null);
   const [chosenLang, setChosenLang] = useState('java');
   const [activeSession, setActiveSession] = useState(null);
+  const [problems, setProblems] = useState([]);
+
+  const subjectId = location.state?.subjectId;
 
   useEffect(() => {
     setHasKey(hasGeminiApiKey());
@@ -151,7 +31,19 @@ export default function CodingDashboard() {
       const session = getSession(currentUser.uid);
       setActiveSession(session);
     }
-  }, [currentUser]);
+    // Tải danh sách đề thi lập trình từ LocalStorage
+    if (subjectId) {
+      let data = storage.loadSubjectCodingProblems(subjectId);
+      if (data.length === 0) {
+        // Tự động seed các đề thi mặc định nếu môn học mới bật chế độ Code và chưa có đề
+        data = storage.loadCodingProblems();
+        storage.saveSubjectCodingProblems(subjectId, data);
+      }
+      setProblems(data);
+    } else {
+      setProblems(storage.loadCodingProblems());
+    }
+  }, [currentUser, subjectId]);
 
   const handleSaveKey = (e) => {
     e.preventDefault();
@@ -345,7 +237,7 @@ export default function CodingDashboard() {
           </h2>
 
           <div className="grid md:grid-cols-3 gap-6">
-            {MOCK_PROBLEMS.map((problem) => (
+            {problems.map((problem) => (
               <Card key={problem.id} className="border-slate-800 hover:border-blue-900/40 hover:shadow-lg hover:shadow-blue-950/10 transition duration-200 rounded-3xl overflow-hidden bg-slate-900">
                 <CardContent className="p-6 flex flex-col justify-between h-full space-y-6">
                   <div className="space-y-3">

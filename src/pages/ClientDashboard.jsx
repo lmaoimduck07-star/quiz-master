@@ -4,13 +4,14 @@ import { useAuth } from '../context/AuthContext';
 import { storage } from '../utils/storage';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { BookOpen, Clock, LogOut, ShieldAlert, Award, FileText, ChevronRight, Play, X, Sun, Moon, Award as AwardIcon, TrendingUp, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
+import { BookOpen, Clock, LogOut, ShieldAlert, Award, FileText, ChevronRight, Play, X, Sun, Moon, Award as AwardIcon, TrendingUp, Calendar, AlertTriangle, Loader2, Code2 } from 'lucide-react';
 
 export default function ClientDashboard() {
   const navigate = useNavigate();
   const { currentUser, logout, activeRole, setActiveRole } = useAuth();
 
   const [subjects, setSubjects] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedSubject, setSelectedSubject] = useState(null);
   const [showPracticeModal, setShowPracticeModal] = useState(false);
   const [showSimModal, setShowSimModal] = useState(false);
@@ -20,7 +21,8 @@ export default function ClientDashboard() {
   const [isEnteringCoding, setIsEnteringCoding] = useState(false);
   const [codingStep, setCodingStep] = useState(0);
 
-  const handleEnterCoding = () => {
+  const handleEnterCoding = (subjectId = null) => {
+    const cleanSubjectId = typeof subjectId === 'string' ? subjectId : null;
     setIsEnteringCoding(true);
     setCodingStep(0);
     
@@ -28,7 +30,7 @@ export default function ClientDashboard() {
     setTimeout(() => setCodingStep(2), 1600);
     setTimeout(() => {
       setIsEnteringCoding(false);
-      navigate('/coding/dashboard');
+      navigate('/coding/dashboard', { state: { subjectId: cleanSubjectId } });
     }, 2400);
   };
 
@@ -37,9 +39,17 @@ export default function ClientDashboard() {
     // Khi quay lại dashboard, đóng và xoá phiên làm bài cũ (nếu có) để lượt thi sau là mới hoàn toàn
     localStorage.removeItem('qm_active_session');
 
-    storage.loadSubjects().then(data => {
-      setSubjects(data.filter(s => s.isActive !== false));
-    });
+    setIsLoading(true);
+    storage.loadSubjects()
+      .then(data => {
+        setSubjects(data.filter(s => s.isActive !== false));
+      })
+      .catch(err => {
+        console.error("Error loading subjects:", err);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   }, []);
 
 
@@ -254,6 +264,11 @@ export default function ClientDashboard() {
         </div>
         {/* Phân hệ thi lập trình tự luận */}
         {(() => {
+          if (isLoading) return null; // Ẩn khi đang tải danh sách môn học để tránh nháy giật giao diện
+
+          const hasCodingSubject = subjects.some(s => s.status === 'developer');
+          if (hasCodingSubject) return null; // Ẩn box này nếu đã có môn thi lập trình trong danh sách
+
           const isAdmin = currentUser?.roles?.includes('Admin') || currentUser?.role === 'Admin';
           const hasCodingPermission = currentUser?.permissions?.codingAccess === true || isAdmin;
           return (
@@ -278,8 +293,8 @@ export default function ClientDashboard() {
                 disabled={!hasCodingPermission}
                 className={`w-full md:w-auto font-bold h-12 px-6 rounded-xl shadow-md shrink-0 border-transparent ${
                   hasCodingPermission 
-                    ? 'bg-white hover:bg-slate-50 text-blue-600' 
-                    : 'bg-white/20 text-white/60 cursor-not-allowed'
+                    ? 'bg-white hover:bg-slate-50 text-blue-600 dark:bg-white dark:hover:bg-slate-100 dark:text-blue-600' 
+                    : 'bg-white/20 text-white/60 dark:bg-white/10 dark:text-white/40 cursor-not-allowed'
                 }`}
               >
                 {hasCodingPermission ? 'Vào Cổng thi Lập trình' : '🔒 Chưa có quyền truy cập'}
@@ -292,7 +307,12 @@ export default function ClientDashboard() {
         <div>
           <h2 className="text-xl font-bold text-slate-700 dark:text-slate-300 mb-6">Môn học đang mở</h2>
 
-          {subjects.length === 0 ? (
+          {isLoading ? (
+            <Card className="border-0 shadow-sm rounded-3xl p-12 text-center text-slate-500 dark:bg-slate-900 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="h-8 w-8 text-primary dark:text-blue-500 animate-spin" />
+              <div className="font-bold text-sm">Đang tải danh sách môn học...</div>
+            </Card>
+          ) : subjects.length === 0 ? (
             <Card className="border-0 shadow-sm rounded-3xl p-12 text-center text-slate-500 dark:bg-slate-900">
               <BookOpen className="h-12 w-12 text-slate-300 dark:text-slate-700 mx-auto mb-4" />
               <div className="font-bold text-lg mb-1">Không có môn học nào đang mở</div>
@@ -302,12 +322,18 @@ export default function ClientDashboard() {
             <div className="flex flex-col gap-5">
               {subjects.map((subject) => {
                 const totalExams = subject.exams ? subject.exams.length : 0;
+                const isCodingSub = subject.status === 'developer';
+                const codingCount = isCodingSub ? storage.loadSubjectCodingProblems(subject.id).length : 0;
                 return (
                   <Card key={subject.id} className="border-0 shadow-sm hover:shadow-md transition duration-200 rounded-3xl overflow-hidden bg-white dark:bg-slate-900 p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
                     {/* Left: Info */}
                     <div className="flex items-start gap-4 flex-1">
-                      <div className="p-3 bg-primary/10 dark:bg-blue-900/20 rounded-2xl text-primary dark:text-blue-400 shrink-0 hidden sm:block">
-                        <BookOpen className="h-6 w-6" />
+                      <div className={`p-3 rounded-2xl shrink-0 hidden sm:block ${
+                        isCodingSub 
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' 
+                          : 'bg-primary/10 dark:bg-blue-900/20 text-primary dark:text-blue-400'
+                      }`}>
+                        {isCodingSub ? <Code2 className="h-6 w-6" /> : <BookOpen className="h-6 w-6" />}
                       </div>
                       <div className="space-y-1">
                         <div className="flex items-center gap-3 flex-wrap">
@@ -318,29 +344,49 @@ export default function ClientDashboard() {
                         <div className="text-xs text-slate-400 dark:text-slate-500 font-semibold">ID: {subject.id}</div>
 
                         <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-bold pt-1">
-                          <FileText className="h-4 w-4 text-slate-400 dark:text-slate-500" />
-                          <span>{totalExams} đề luyện tập</span>
+                          {isCodingSub ? (
+                            <>
+                              <Code2 className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+                              <span>{codingCount} đề lập trình</span>
+                            </>
+                          ) : (
+                            <>
+                              <FileText className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+                              <span>{totalExams} đề luyện tập</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
 
                     {/* Right: Actions */}
                     <div className="flex gap-3 shrink-0 w-full md:w-auto">
-                      <Button
-                        variant="outline"
-                        className="flex-1 md:flex-none font-bold h-11 px-6 rounded-xl border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 bg-transparent"
-                        disabled={totalExams === 0}
-                        onClick={() => openPracticeList(subject)}
-                      >
-                        Luyện tập
-                      </Button>
-                      <Button
-                        className="flex-1 md:flex-none font-bold h-11 px-6 rounded-xl gap-1.5 shadow-sm"
-                        disabled={totalExams === 0}
-                        onClick={() => startSimulation(subject)}
-                      >
-                        <Play className="h-4 w-4 fill-white" /> Thi mô phỏng
-                      </Button>
+                      {isCodingSub ? (
+                        <Button
+                          className="w-full md:w-auto font-bold h-11 px-6 rounded-xl gap-1.5 shadow-sm bg-blue-600 hover:bg-blue-700 text-white border-transparent"
+                          onClick={() => handleEnterCoding(subject.id)}
+                        >
+                          <Code2 className="h-4 w-4" /> Vào Cổng Lập trình
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            variant="outline"
+                            className="flex-1 md:flex-none font-bold h-11 px-6 rounded-xl border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 bg-transparent"
+                            disabled={totalExams === 0}
+                            onClick={() => openPracticeList(subject)}
+                          >
+                            Luyện tập
+                          </Button>
+                          <Button
+                            className="flex-1 md:flex-none font-bold h-11 px-6 rounded-xl gap-1.5 shadow-sm"
+                            disabled={totalExams === 0}
+                            onClick={() => startSimulation(subject)}
+                          >
+                            <Play className="h-4 w-4 fill-white" /> Thi mô phỏng
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </Card>
                 );

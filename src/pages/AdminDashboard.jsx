@@ -1,14 +1,16 @@
+// Trigger HMR Rebuild
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { LayoutDashboard, Users, FileText, Activity, LogOut, Upload, Search, ChevronLeft, ChevronRight, BookOpen, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Activity, LogOut, Upload, Search, ChevronLeft, ChevronRight, BookOpen, Sun, Moon, Code2 } from 'lucide-react';
 import SubjectManager from '../components/exams/SubjectManager';
 import ExamManager from '../components/exams/ExamManager';
 import ExamEditor from '../components/exams/ExamEditor';
 import UserManager from '../components/users/UserManager';
 import AuditLogManager from '../components/audit/AuditLogManager';
+import CodingProblemManager from '../components/exams/CodingProblemManager';
 import { storage } from '../utils/storage';
 import { useAuth } from '../context/AuthContext';
 
@@ -55,18 +57,27 @@ export default function AdminDashboard() {
     loadAll();
   }, []);
 
-  // Auto-save khi subjects thay đổi (bỏ qua khi mới load xong)
-  const subjectsRef = React.useRef(false);
+  // Auto-save khi subjects thay đổi (Chỉ lưu sau khi đã tải xong dữ liệu từ Firebase)
+  const subjectsLoadedRef = React.useRef(false);
   useEffect(() => {
-    if (!subjectsRef.current) { subjectsRef.current = true; return; }
+    if (dataLoading) return;
+    if (!subjectsLoadedRef.current) {
+      subjectsLoadedRef.current = true;
+      return;
+    }
     storage.saveSubjects(subjects);
-  }, [subjects]);
+  }, [subjects, dataLoading]);
 
-  const usersRef = React.useRef(false);
+  // Auto-save khi users thay đổi (Chỉ lưu sau khi đã tải xong dữ liệu từ Firebase)
+  const usersLoadedRef = React.useRef(false);
   useEffect(() => {
-    if (!usersRef.current) { usersRef.current = true; return; }
+    if (dataLoading) return;
+    if (!usersLoadedRef.current) {
+      usersLoadedRef.current = true;
+      return;
+    }
     storage.saveUsers(users);
-  }, [users]);
+  }, [users, dataLoading]);
 
   const addLog = async (category, action, severity, payload = null) => {
     const newLog = {
@@ -126,6 +137,7 @@ export default function AdminDashboard() {
               <BookOpen className="h-5 w-5" /> Quản lý môn học
             </button>
 
+
             <button
               onClick={() => setActiveTab('users')}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${activeTab === 'users' ? 'bg-primary text-white' : 'hover:bg-slate-800 hover:text-white'}`}
@@ -167,6 +179,16 @@ export default function AdminDashboard() {
               </h2>
             </div>
             <div className="flex items-center gap-4">
+              {/* Nút chuyển sang giao diện Học sinh */}
+              <Button
+                variant="outline"
+                onClick={() => navigate('/client/dashboard')}
+                className="font-bold text-xs h-9 px-4 rounded-xl border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-350 hover:bg-slate-100 dark:hover:bg-slate-800 bg-transparent flex items-center gap-1.5 animate-none"
+                title="Chuyển sang giao diện Học sinh"
+              >
+                <Users className="h-4 w-4" /> Giao diện Học sinh
+              </Button>
+
               {/* Theme Toggle */}
               <Button
                 variant="ghost"
@@ -225,6 +247,16 @@ export default function AdminDashboard() {
                 }
 
                 if (currentSubject) {
+                  const isCoding = currentSubject.status === 'developer';
+                  if (isCoding) {
+                    return (
+                      <CodingProblemManager
+                        subject={currentSubject}
+                        onBack={() => setCurrentSubject(null)}
+                      />
+                    );
+                  }
+
                   const handlePlayExam = (examId) => {
                     const exam = currentSubject.exams.find(e => e.id === examId);
                     navigate('/client/exam', {
@@ -265,11 +297,13 @@ export default function AdminDashboard() {
                       }
                     }}
                     onOpenSubject={(id) => setCurrentSubject(subjects.find(s => s.id === id))}
+                    onUpdateSubject={handleUpdateSubject}
                   />
                 );
               })()}
             </div>
           )}
+
 
 
           {activeTab === 'audit' && (

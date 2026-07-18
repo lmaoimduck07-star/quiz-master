@@ -134,12 +134,6 @@ export default function Login() {
                   <AlertCircle className="h-5 w-5 shrink-0" />
                   <span>{error}</span>
                 </div>
-                <div className="mt-2 pt-2 border-t border-red-200/50 text-[10px] font-mono text-left max-h-32 overflow-y-auto whitespace-pre-wrap opacity-80">
-                  <strong>Auth Debug Logs:</strong>
-                  {JSON.parse(localStorage.getItem('qm_auth_logs') || '[]').map((log, i) => (
-                    <div key={i} className="leading-tight mt-1">{log}</div>
-                  ))}
-                </div>
               </div>
             )}
 

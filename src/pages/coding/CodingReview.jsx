@@ -1,5 +1,5 @@
 // src/pages/coding/CodingReview.jsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent } from '../../components/ui/Card';
@@ -29,6 +29,9 @@ export default function CodingReview() {
   const feedback = session?.feedback || '';
   const summary = session?.summary || '';
   const chatHistory = session?.chatHistory || [];
+
+  const reviewFiles = session?.files || (code ? { 'Solution': code } : { 'Không có code': '' });
+  const [activeReviewFile, setActiveReviewFile] = useState(Object.keys(reviewFiles)[0]);
 
   const codeScore = parseFloat(((testResults.passedCount / testResults.totalCount) * 10).toFixed(1));
   const finalScore = parseFloat(((codeScore * 0.6) + (vivaScore * 0.4)).toFixed(1));
@@ -79,7 +82,9 @@ export default function CodingReview() {
               <div className="text-3xl font-black text-white">{codeScore}/10</div>
               <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Điểm chấm Code</div>
               <div className="text-[10px] text-emerald-500 font-bold">
-                Đạt {testResults.passedCount}/{testResults.totalCount} Testcases
+                {testResults.isAiEvaluated 
+                  ? `Đạt ${testResults.passedCount}/${testResults.totalCount} Yêu cầu AI`
+                  : `Đạt ${testResults.passedCount}/${testResults.totalCount} Testcases`}
               </div>
             </CardContent>
           </Card>
@@ -117,12 +122,51 @@ export default function CodingReview() {
           </CardContent>
         </Card>
 
+        {/* Mã nguồn bài làm */}
+        <Card className="border-slate-800 bg-slate-900 rounded-3xl overflow-hidden shadow-md">
+          <CardContent className="p-6 space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+              <Sparkles className="h-5 w-5 text-blue-400" />
+              <h3 className="font-bold text-slate-200">Mã nguồn bài làm</h3>
+            </div>
+            
+            {/* File selection tabs */}
+            <div className="flex flex-wrap gap-1.5 border-b border-slate-800 pb-2">
+              {Object.keys(reviewFiles).map((fileName) => {
+                const isActive = fileName === activeReviewFile;
+                return (
+                  <button
+                    key={fileName}
+                    onClick={() => setActiveReviewFile(fileName)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition select-none ${
+                      isActive
+                        ? 'bg-slate-800 text-blue-400 border border-slate-700'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
+                    }`}
+                  >
+                    {fileName}
+                  </button>
+                );
+              })}
+            </div>
+            
+            {/* Code view panel */}
+            <div className="bg-slate-950 p-4 border border-slate-850 rounded-2xl overflow-x-auto max-h-[400px]">
+              <pre className="font-mono text-xs text-slate-350 leading-relaxed whitespace-pre text-left">
+                <code>{reviewFiles[activeReviewFile]}</code>
+              </pre>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Testcases Review Details */}
         <Card className="border-slate-800 bg-slate-900 rounded-3xl overflow-hidden shadow-md">
           <CardContent className="p-6 space-y-4">
             <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
               <Terminal className="h-5 w-5 text-emerald-400" />
-              <h3 className="font-bold text-slate-200">Chi tiết chạy Test Cases</h3>
+              <h3 className="font-bold text-slate-200">
+                {testResults.isAiEvaluated ? 'Kết quả Thẩm định AI' : 'Chi tiết chạy Test Cases'}
+              </h3>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {testResults.results.map((r) => (
@@ -132,7 +176,9 @@ export default function CodingReview() {
                     : 'border-red-500/10 bg-red-950/10'
                 }`}>
                   <div className="flex justify-between items-start">
-                    <span className="text-xs font-bold text-slate-200">Test Case {r.id}</span>
+                    <span className="text-xs font-bold text-slate-200">
+                      {testResults.isAiEvaluated ? `Tiêu chí ${r.id}` : `Test Case ${r.id}`}
+                    </span>
                     {r.passed ? (
                       <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">Thành công</span>
                     ) : (
@@ -140,9 +186,18 @@ export default function CodingReview() {
                     )}
                   </div>
                   <div className="space-y-1 font-mono text-[10px] text-slate-400">
-                    <div>Input: <span className="text-slate-300">{r.input}</span></div>
-                    <div>Đầu ra: <span className="text-slate-300">{r.actual}</span></div>
-                    <div>Kỳ vọng: <span className="text-slate-300">{r.expected}</span></div>
+                    {testResults.isAiEvaluated ? (
+                      <>
+                        <div>Yêu cầu: <span className="text-slate-300 font-sans block pt-0.5">{r.input}</span></div>
+                        <div className="pt-1">Chi tiết: <span className={r.passed ? "text-emerald-400 font-sans block pt-0.5" : "text-red-400 font-sans block pt-0.5"}>{r.actual}</span></div>
+                      </>
+                    ) : (
+                      <>
+                        <div>Input: <span className="text-slate-300">{r.input}</span></div>
+                        <div>Đầu ra: <span className="text-slate-300">{r.actual}</span></div>
+                        <div>Kỳ vọng: <span className="text-slate-300">{r.expected}</span></div>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}

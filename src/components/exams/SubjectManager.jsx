@@ -4,7 +4,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { BookOpen, BarChart2, Plus, BookCheck } from 'lucide-react';
 
-export default function SubjectManager({ subjects, onAddSubject, onDeleteSubject, onOpenSubject }) {
+export default function SubjectManager({ subjects, onAddSubject, onDeleteSubject, onOpenSubject, onUpdateSubject }) {
   const [subName, setSubName] = useState('');
 
   const handleCreate = () => {
@@ -17,6 +17,7 @@ export default function SubjectManager({ subjects, onAddSubject, onDeleteSubject
       id: 'sub_' + Date.now(),
       name: subName.trim(),
       isCompleted: false,
+      status: 'normal',
       exams: []
     });
 
@@ -70,7 +71,7 @@ export default function SubjectManager({ subjects, onAddSubject, onDeleteSubject
             Bạn chưa tạo môn học nào.
           </div>
         ) : (
-          activeSubs.map(sub => <SubjectCard key={sub.id} subject={sub} onDelete={onDeleteSubject} onOpen={onOpenSubject} />)
+          activeSubs.map(sub => <SubjectCard key={sub.id} subject={sub} onDelete={onDeleteSubject} onOpen={onOpenSubject} onUpdate={onUpdateSubject} />)
         )}
       </div>
 
@@ -84,7 +85,7 @@ export default function SubjectManager({ subjects, onAddSubject, onDeleteSubject
             <div className="flex-1 h-0.5 bg-emerald-200 dark:bg-emerald-950/40 rounded"></div>
           </div>
           <div className="flex flex-col gap-4">
-            {completedSubs.map(sub => <SubjectCard key={sub.id} subject={sub} onDelete={onDeleteSubject} onOpen={onOpenSubject} />)}
+            {completedSubs.map(sub => <SubjectCard key={sub.id} subject={sub} onDelete={onDeleteSubject} onOpen={onOpenSubject} onUpdate={onUpdateSubject} />)}
           </div>
         </>
       )}
