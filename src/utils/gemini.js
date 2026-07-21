@@ -15,14 +15,18 @@ export const saveGeminiApiKey = (key) => {
   }
 };
 
+const CANDIDATE_MODELS = [
+  'gemini-3.5-flash',
+  'gemini-flash-lite-latest',
+  'gemini-2.0-flash-lite',
+  'gemini-2.0-flash',
+];
+
 const callGemini = async (prompt, systemInstruction = '', jsonMode = false) => {
   const apiKey = getApiKey();
   if (!apiKey) {
     throw new Error('Chưa cấu hình API Key Gemini. Vui lòng thêm vào file .env hoặc nhập ở giao diện.');
   }
-
-  // Sử dụng mô hình gemini-3.5-flash (phiên bản mới nhất)
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
   const requestBody = {
     contents: [
@@ -50,31 +54,51 @@ const callGemini = async (prompt, systemInstruction = '', jsonMode = false) => {
     requestBody.generationConfig.responseMimeType = "application/json";
   }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(requestBody)
-  });
+  let lastError = null;
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message = errorData.error?.message || `HTTP error! status: ${response.status}`;
-    throw new Error(`Lỗi Gemini API: ${message}`);
+  for (const modelName of CANDIDATE_MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const parts = data.candidates?.[0]?.content?.parts || [];
+        const textParts = parts.filter(p => p.text !== undefined);
+        return textParts.length > 0 ? textParts[textParts.length - 1].text : '';
+      }
+
+      const errorData = await response.json().catch(() => ({}));
+      const message = errorData.error?.message || `HTTP error! status: ${response.status}`;
+      lastError = new Error(`Lỗi Gemini API (${modelName}): ${message}`);
+
+      // Nếu lỗi 429 (quota) hoặc 404 (model not found), thử model tiếp theo trong danh sách
+      if (response.status === 429 || response.status === 404) {
+        console.warn(`[Gemini API] Model ${modelName} bị lỗi ${response.status}, đang thử model tiếp theo...`);
+        continue;
+      } else {
+        // Lỗi khác (như 401 unauthenticated), throw ngay
+        throw lastError;
+      }
+    } catch (err) {
+      if (err.message?.includes('401') || err.message?.includes('UNAUTHENTICATED')) {
+        throw err;
+      }
+      lastError = err;
+    }
   }
 
-  const data = await response.json();
-  // Gemini 3.5 Flash (thinking model) trả về nhiều parts: phần đầu là "thinking", phần cuối là text thực
-  const parts = data.candidates?.[0]?.content?.parts || [];
-  // Lấy phần text cuối cùng (bỏ qua phần thinking)
-  const textParts = parts.filter(p => p.text !== undefined);
-  const text = textParts.length > 0 ? textParts[textParts.length - 1].text : '';
-  return text;
+  throw lastError || new Error('Không thể kết nối đến Gemini API. Vui lòng kiểm tra API key.');
 };
 
 // 1. Tạo câu hỏi đầu tiên
-export const generateFirstQuestion = async (problem, studentCode, testResults, language = 'java') => {
+export const generateFirstQuestion = async (problem, studentCode, lastOutput, language = 'python') => {
   const systemInstruction = `Bạn là giám khảo chấm thi vấn đáp lập trình chuyên nghiệp. 
 Nhiệm vụ của bạn là hỏi sinh viên đúng 5 câu hỏi xoay quanh bài làm của họ, mỗi lượt chỉ hỏi 1 câu.
 Hãy đặt câu hỏi đầu tiên ngắn gọn, tập trung thẳng vào logic thuật toán của họ.
@@ -88,8 +112,8 @@ Bài làm của sinh viên (ngôn ngữ: ${language.toUpperCase()}):
 ${studentCode}
 \`\`\`
 
-Kết quả chạy testcases:
-${JSON.stringify(testResults, null, 2)}
+Output khi chạy code (terminal output):
+${lastOutput ? lastOutput : '(Chưa chạy hoặc không có output)'}
 
 Hãy đặt câu hỏi vấn đáp đầu tiên (Câu 1/5) cho sinh viên này bằng tiếng Việt. Câu hỏi ngắn gọn, trực diện, không lan man.`;
 
@@ -122,15 +146,18 @@ Hãy đưa ra câu hỏi vấn đáp tiếp theo (Câu ${currentQuestionIndex}/5
 };
 
 // 3. Đánh giá và chấm điểm toàn bộ sau 5 câu hỏi
-export const evaluateViva = async (problem, studentCode, testResults, chatHistory, language = 'java') => {
+export const evaluateViva = async (problem, studentCode, lastOutput, chatHistory, language = 'python') => {
   const systemInstruction = `Bạn là giám khảo chấm thi vấn đáp lập trình chuyên nghiệp.
 Hãy đánh giá toàn bộ cuộc đối thoại vấn đáp 5 câu của sinh viên, xem họ có thực sự tự viết code, có hiểu thuật toán và tối ưu hóa code tốt không.
 Trả về dữ liệu dạng JSON khớp chính xác với định dạng sau:
 {
-  "score": 8.5,
+  "vivaScore": 8.5,
+  "aiCodeScore": 7.0,
   "feedback": "Nhận xét chi tiết về kiến thức, khả năng giải trình và tối ưu hóa thuật toán của sinh viên.",
   "summary": "Tóm tắt ngắn gọn trong 1-2 câu."
-}`;
+}
+VivaScore: chấm riêng phần trả lời vấn đáp (0-10).
+AiCodeScore: chấm chất lượng code dựa trên các câu trả lời và output thực tế (0-10).`;
 
   const formattedHistory = chatHistory.map(msg => `${msg.role === 'user' ? 'Sinh viên' : 'Giám khảo'}: ${msg.text}`).join('\n');
 
@@ -142,35 +169,30 @@ Bài làm của sinh viên (ngôn ngữ: ${language.toUpperCase()}):
 ${studentCode}
 \`\`\`
 
-Kết quả testcases:
-${JSON.stringify(testResults, null, 2)}
+Output khi chạy code:
+${lastOutput ? lastOutput : '(Không có output)'}
 
 Lịch sử cuộc vấn đáp 5 câu:
 ${formattedHistory}
 
-Hãy đánh giá và cho điểm vấn đáp (thang điểm 10). Trả về duy nhất đối tượng JSON chứa score, feedback và summary.`;
+Hãy đánh giá và cho điểm. Trả về duy nhất đối tượng JSON chứa vivaScore, aiCodeScore, feedback và summary.`;
 
   const responseText = await callGemini(prompt, systemInstruction, true);
   try {
-    // Thử parse trực tiếp
     return JSON.parse(responseText);
   } catch (e) {
-    // Thử tìm JSON object trong response text (model có thể trả thêm text bao quanh)
     try {
-      const jsonMatch = responseText.match(/\{[\s\S]*"score"[\s\S]*"feedback"[\s\S]*"summary"[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
+      const jsonMatch = responseText.match(/\{[\s\S]*"vivaScore"[\s\S]*\}/);
+      if (jsonMatch) return JSON.parse(jsonMatch[0]);
     } catch (e2) {
       console.error('Failed to extract JSON from response:', e2);
     }
-    
     console.error('Failed to parse Gemini evaluation JSON:', responseText, e);
-    // Fallback if parsing fails
     return {
-      score: 7.0,
-      feedback: "Hệ thống không phân tích được phản hồi JSON từ AI. Đánh giá sơ bộ: Học sinh có hiểu biết cơ bản về bài làm của mình.",
-      summary: "Hoàn thành bài thi vấn đáp."
+      vivaScore: 7.0,
+      aiCodeScore: 6.5,
+      feedback: 'Hệ thống không phân tích được phản hồi JSON từ AI. Đánh giá sơ bộ: Học sinh có hiểu biết cơ bản về bài làm của mình.',
+      summary: 'Hoàn thành bài thi vấn đáp.'
     };
   }
 };

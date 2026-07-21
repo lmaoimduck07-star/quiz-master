@@ -1,26 +1,44 @@
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ShieldAlert, ArrowLeft } from 'lucide-react';
 
 export default function PrivateRoute({ children, allowedRoles, requiredPermission }) {
-  const { currentUser, activeRole } = useAuth();
+  const { currentUser, activeRole, logout } = useAuth();
+  const location = useLocation();
 
+  // 1. Kiểm tra chưa đăng nhập
   if (!currentUser) {
+    const fullPath = location.pathname + location.search;
+    try {
+      sessionStorage.setItem('qm_redirect_after_login', fullPath);
+      sessionStorage.setItem('qm_auth_notice', '🔒 Bạn cần đăng nhập để truy cập trang này.');
+    } catch (e) {}
     return <Navigate to="/login" replace />;
   }
 
+  // 2. Kiểm tra tài khoản bị khóa
+  if (currentUser.status === 'Locked') {
+    try {
+      sessionStorage.setItem('qm_auth_notice', `⛔ Tài khoản của bạn đã bị khóa. ${currentUser.lockReason ? 'Lý do: ' + currentUser.lockReason : ''}`);
+    } catch (e) {}
+    if (logout) logout();
+    return <Navigate to="/login" replace />;
+  }
+
+  // 3. Kiểm tra phân quyền vai trò (Role)
   if (allowedRoles && !allowedRoles.includes(activeRole)) {
-    // Nếu không có quyền, chuyển về đúng dashboard của họ
+    try {
+      sessionStorage.setItem('qm_auth_notice', '🚫 Bạn không có quyền truy cập vào trang này.');
+    } catch (e) {}
     return activeRole === 'Admin' 
       ? <Navigate to="/admin/dashboard" replace /> 
       : <Navigate to="/client/dashboard" replace />;
   }
 
-  // Kiểm tra permission tính năng (nếu có yêu cầu)
+  // 4. Kiểm tra permission tính năng (nếu có yêu cầu)
   if (requiredPermission) {
     const userPermissions = currentUser.permissions || {};
     const hasPermission = userPermissions[requiredPermission] === true;
-    // Admin luôn có quyền truy cập (cho dù đang hoạt động dưới vai trò Học sinh)
     const isAdmin = activeRole === 'Admin' || currentUser?.roles?.includes('Admin') || currentUser?.role === 'Admin';
 
     if (!hasPermission && !isAdmin) {

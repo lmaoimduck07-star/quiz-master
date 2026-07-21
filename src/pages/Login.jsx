@@ -13,10 +13,22 @@ export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [authNotice, setAuthNotice] = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [pendingUser, setPendingUser] = useState(null);
+
+  // Đọc thông báo bảo mật (nếu có từ PrivateRoute)
+  useEffect(() => {
+    try {
+      const notice = sessionStorage.getItem('qm_auth_notice');
+      if (notice) {
+        setAuthNotice(notice);
+        sessionStorage.removeItem('qm_auth_notice');
+      }
+    } catch (e) {}
+  }, []);
 
   // Hiển thị lỗi redirect từ Google (nếu có)
   useEffect(() => {
@@ -26,14 +38,22 @@ export default function Login() {
     }
   }, [redirectError, clearRedirectError]);
 
+  const getRedirectTarget = (role) => {
+    try {
+      const target = sessionStorage.getItem('qm_redirect_after_login');
+      if (target) {
+        sessionStorage.removeItem('qm_redirect_after_login');
+        return target;
+      }
+    } catch (e) {}
+    return role === 'Admin' ? '/admin/dashboard' : '/client/dashboard';
+  };
+
   // Auto-redirect nếu đã đăng nhập (ví dụ sau Google redirect)
   useEffect(() => {
     if (currentUser && activeRole && !redirectLoading) {
-      if (activeRole === 'Admin') {
-        navigate('/admin/dashboard', { replace: true });
-      } else {
-        navigate('/client/dashboard', { replace: true });
-      }
+      const target = getRedirectTarget(activeRole);
+      navigate(target, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, activeRole, redirectLoading]);
@@ -53,11 +73,8 @@ export default function Login() {
         setPendingUser(result.user);
         setShowRoleModal(true);
       } else {
-        if (result.role === 'Admin') {
-          navigate('/admin/dashboard');
-        } else {
-          navigate('/client/dashboard');
-        }
+        const target = getRedirectTarget(result.role);
+        navigate(target, { replace: true });
       }
     } catch (err) {
       setError(err.message || 'Đăng nhập thất bại!');
@@ -69,11 +86,8 @@ export default function Login() {
       completeLogin(pendingUser, role);
       setShowRoleModal(false);
       setPendingUser(null);
-      if (role === 'Admin') {
-        navigate('/admin/dashboard');
-      } else {
-        navigate('/client/dashboard');
-      }
+      const target = getRedirectTarget(role);
+      navigate(target, { replace: true });
     }
   };
 
@@ -128,12 +142,17 @@ export default function Login() {
 
         <form onSubmit={handleSubmit}>
           <CardContent className="pt-6 px-8 space-y-5">
+            {authNotice && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/20 dark:bg-amber-950/40 dark:border-amber-800/50 rounded-2xl text-amber-600 dark:text-amber-400 text-sm font-medium animate-in fade-in duration-200 shadow-sm flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-amber-500" />
+                <div className="leading-relaxed">{authNotice}</div>
+              </div>
+            )}
+
             {error && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-semibold space-y-2 animate-in fade-in duration-200">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 shrink-0" />
-                  <span>{error}</span>
-                </div>
+              <div className="p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50 rounded-2xl text-red-600 dark:text-red-400 text-sm font-semibold space-y-2 animate-in fade-in duration-200 flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 shrink-0" />
+                <span>{error}</span>
               </div>
             )}
 
@@ -171,7 +190,7 @@ export default function Login() {
               </label>
               <Input
                 type="text"
-                placeholder="Ví dụ: admin@edu.vn hoặc hs_tran"
+                placeholder="Nhập tên đăng nhập hoặc email của bạn"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="h-12 rounded-xl border-slate-200 dark:border-slate-800 font-medium"

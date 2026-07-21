@@ -15,33 +15,10 @@ import { db } from '../firebase/config';
 // DỮ LIỆU MẶC ĐỊNH (seed khi Firestore trống)
 // ─────────────────────────────────────────────
 const DEFAULT_USERS = [
-  { id: 'U01', fullName: 'Nguyễn Văn Admin', username: 'admin@edu.vn', password: '12345678', roles: ['Admin', 'Student'], status: 'Active', permissions: { codingAccess: true } },
-  { id: 'U02', fullName: 'Trần Học Sinh', username: 'hs_tran', password: '12345678', roles: ['Student'], status: 'Active', permissions: { codingAccess: false } },
-  { id: 'U03', fullName: 'Lê Học Sinh', username: 'hs_le', password: '12345678', roles: ['Student'], status: 'Locked', permissions: { codingAccess: false } },
+  { id: 'U01', fullName: 'Nguyễn Văn Admin', username: 'admin@edu.vn', password: '12345678', roles: ['Admin', 'Student'], status: 'Active', permissions: { codingAccess: true } }
 ];
 
-const DEFAULT_SUBJECTS = [
-  {
-    id: 'sub_1',
-    name: 'Toán học THPT',
-    isActive: true,
-    status: 'normal',
-    exams: [
-      {
-        id: 'ex_1',
-        config: { title: 'Luyện tập: Hàm số & Đạo hàm', time: 15, password: '', shuffleQ: true, shuffleA: true },
-        created: '10/07/2026',
-        questions: [
-          { id: 'q1_1', content: 'Đạo hàm của hàm số y = x^2 là:', options: ["y' = 2x", "y' = x", "y' = 2", "y' = x^3"], answer: 0 },
-          { id: 'q1_2', content: 'Hàm số y = x^3 - 3x đồng biến trên khoảng nào?', options: ['(-1; 1)', '(-inf; -1) và (1; +inf)', '(-inf; 1)', '(-1; +inf)'], answer: 1 },
-          { id: 'q1_3', content: 'Tâm đối xứng của đồ thị hàm số bậc ba y = x^3 là:', options: ['(0; 0)', '(1; 1)', '(0; 1)', '(1; 0)'], answer: 0 },
-          { id: 'q1_4', content: 'Hàm số y = sin(x) tuần hoàn với chu kỳ:', options: ['pi', '2*pi', 'pi/2', '3*pi'], answer: 1 },
-          { id: 'q1_5', content: 'Số điểm cực trị của hàm số y = x^4 - 2x^2 + 1 là:', options: ['1', '2', '3', '0'], answer: 2 },
-        ]
-      },
-    ]
-  },
-];
+const DEFAULT_SUBJECTS = [];
 
 // ─────────────────────────────────────────────
 // HELPER: Kiểm tra collection có trống không
@@ -444,119 +421,62 @@ async function loadExamResults(userId) {
 }
 
 // ─────────────────────────────────────────────
-// CODING PROBLEMS (Lưu trong LocalStorage theo yêu cầu không đẩy lên Firebase)
+// CODING PROBLEMS (Đã đồng bộ trực tiếp lên Firebase Firestore)
 // ─────────────────────────────────────────────
-const DEFAULT_CODING_PROBLEMS = [
-  {
-    id: 'two_sum',
-    title: 'Two Sum - Tìm cặp số',
-    difficulty: 'Dễ',
-    category: 'Mảng & Hashtable',
-    description: `Cho một mảng số nguyên <code>nums</code> và một số nguyên <code>target</code>, hãy viết hàm trả về chỉ số (index) của hai số sao cho tổng của chúng bằng đúng <code>target</code>.<br/><br/>Bạn có thể giả định rằng mỗi đầu vào sẽ có <b>đúng một giải pháp</b>, và bạn không được sử dụng cùng một phần tử hai lần.`,
-    templates: {
-      python: `def twoSum(nums: list[int], target: int) -> list[int]:
-    # Viết code Python ở đây
-    pass`,
-      cpp: `#include <vector>
-using namespace std;
+const DEFAULT_CODING_PROBLEMS = [];
 
-vector<int> twoSum(vector<int>& nums, int target) {
-    // Viết code C++ ở đây
-    
-}`,
-      c: `int* twoSum(int* nums, int numsSize, int target, int* returnSize) {
-    // Viết code C ở đây
-    
-}`,
-      java: `import java.util.*;
+function filterOldTestProblems(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter(p => p.id !== 'two_sum' && p.id !== 'prime_check' && p.id !== 'longest_word');
+}
 
-class Solution {
-    public int[] twoSum(int[] nums, int target) {
-        // Viết code Java ở đây
-        
-    }
-}`
-    },
-    testCases: [
-      { input: '[[2, 7, 11, 15], 9]', output: '[0,1]', args: [[2, 7, 11, 15], 9] },
-      { input: '[[3, 2, 4], 6]', output: '[1,2]', args: [[3, 2, 4], 6] },
-      { input: '[[3, 3], 6]', output: '[0,1]', args: [[3, 3], 6] }
-    ]
-  },
-  {
-    id: 'prime_check',
-    title: 'Kiểm tra số nguyên tố',
-    difficulty: 'Dễ',
-    category: 'Toán học & Logic',
-    description: `Viết hàm nhận vào một số nguyên dương <code>n</code>. Trả về <code>true</code> nếu <code>n</code> là số nguyên tố, ngược lại trả về <code>false</code>.<br/><br/>Số nguyên tố là số lớn hơn 1 và chỉ chia hết cho 1 và chính nó.`,
-    templates: {
-      python: `def isPrime(n: int) -> bool:
-    # Viết code Python ở đây
-    pass`,
-      cpp: `bool isPrime(int n) {
-    // Viết code C++ ở đây
-    
-}`,
-      c: `#include <stdbool.h>
-
-bool isPrime(int n) {
-    // Viết code C ở đây
-    
-}`,
-      java: `class Solution {
-    public boolean isPrime(int n) {
-        // Viết code Java ở đây
-        
-    }
-}`
-    },
-    testCases: [
-      { input: '[4]', output: 'false', args: [4] },
-      { input: '[17]', output: 'true', args: [17] },
-      { input: '[1]', output: 'false', args: [1] },
-      { input: '[2]', output: 'true', args: [2] }
-    ]
-  },
-  {
-    id: 'longest_word',
-    title: 'Tìm từ dài nhất',
-    difficulty: 'Trung bình',
-    category: 'Chuỗi (String)',
-    description: `Viết hàm nhận vào một câu tiếng Anh <code>str</code>. Tìm từ dài nhất trong câu đó và trả về <b>độ dài</b> của từ đó.<br/><br/>Các từ được ngăn cách bởi dấu cách và bỏ qua các dấu câu cơ bản.`,
-    templates: {
-      python: `def findLongestWordLength(str: str) -> int:
-    # Viết code Python ở đây
-    pass`,
-      cpp: `#include <string>
-using namespace std;
-
-int findLongestWordLength(string str) {
-    // Viết code C++ ở đây
-    
-}`,
-      c: `int findLongestWordLength(char* str) {
-    // Viết code C ở đây
-    
-}`,
-      java: `class Solution {
-    public int findLongestWordLength(String str) {
-        // Viết code Java ở đây
-        
-    }
-}`
-    },
-    testCases: [
-      { input: '["The quick brown fox jumped over the lazy dog"]', output: '6', args: ["The quick brown fox jumped over the lazy dog"] },
-      { input: '["Hello World"]', output: '5', args: ["Hello World"] },
-      { input: '["Coding is absolutely awesome"]', output: '10', args: ["Coding is absolutely awesome"] }
-    ]
-  }
-];
-
-function loadCodingProblems() {
+async function loadCodingProblems() {
   try {
+    let allProblems = [];
+
+    // 1. Tải từ collection 'coding_problems' trong Firestore
+    const snap = await getDocs(collection(db, 'coding_problems'));
+    if (!snap.empty) {
+      snap.docs.forEach(d => {
+        allProblems.push({ id: d.id, ...d.data() });
+      });
+    }
+
+    // 2. Tải từ các môn học trong Firestore có chứa codingProblems
+    try {
+      const subjectsSnap = await getDocs(collection(db, 'subjects'));
+      subjectsSnap.docs.forEach(d => {
+        const sData = d.data();
+        if (Array.isArray(sData.codingProblems) && sData.codingProblems.length > 0) {
+          sData.codingProblems.forEach(p => {
+            if (!allProblems.some(existing => existing.id === p.id)) {
+              allProblems.push({ ...p, subjectId: d.id });
+            }
+          });
+        }
+      });
+    } catch (e) {
+      console.warn('[Storage] loadCodingProblems -> warning reading subjects coding problems:', e);
+    }
+
+    allProblems = filterOldTestProblems(allProblems);
+    allProblems = allProblems.map(p => {
+      if (p.templates && p.templates.javascript) {
+        const { javascript, ...rest } = p.templates;
+        return { ...p, templates: rest };
+      }
+      return p;
+    });
+
+    if (allProblems.length > 0) {
+      localStorage.setItem('qm_coding_problems', JSON.stringify(allProblems));
+      return allProblems;
+    }
+
+    // 3. Fallback sang LocalStorage nếu Firestore chưa có dữ liệu
     const localData = localStorage.getItem('qm_coding_problems');
     let problems = localData ? JSON.parse(localData) : DEFAULT_CODING_PROBLEMS;
+    problems = filterOldTestProblems(problems);
     problems = problems.map(p => {
       if (p.templates && p.templates.javascript) {
         const { javascript, ...rest } = p.templates;
@@ -564,24 +484,46 @@ function loadCodingProblems() {
       }
       return p;
     });
-    if (!localData) {
-      localStorage.setItem('qm_coding_problems', JSON.stringify(problems));
-    }
     return problems;
   } catch (e) {
     console.error('[Storage] loadCodingProblems error:', e);
-    return DEFAULT_CODING_PROBLEMS;
+    try {
+      const localData = localStorage.getItem('qm_coding_problems');
+      return localData ? JSON.parse(localData) : DEFAULT_CODING_PROBLEMS;
+    } catch (err) {
+      return DEFAULT_CODING_PROBLEMS;
+    }
   }
 }
 
-function saveCodingProblems(problems) {
+async function saveCodingProblems(problems) {
   try {
-    localStorage.setItem('qm_coding_problems', JSON.stringify(problems));
-    console.log('[Storage] saveCodingProblems -> saved', problems.length, 'problems');
+    const clean = filterOldTestProblems(problems);
+    localStorage.setItem('qm_coding_problems', JSON.stringify(clean));
+
+    // Upsert tất cả đề thi lập trình lên Firestore collection 'coding_problems'
+    const batch = writeBatch(db);
+    const existing = await getDocs(collection(db, 'coding_problems'));
+    const existingIds = new Set(existing.docs.map(d => d.id));
+    const newIds = new Set(clean.map(p => p.id));
+
+    // Xóa đề thi không còn trong danh sách
+    existing.docs.forEach(d => {
+      if (!newIds.has(d.id)) batch.delete(doc(db, 'coding_problems', d.id));
+    });
+
+    // Upsert đề thi mới/sửa
+    clean.forEach(prob => {
+      batch.set(doc(db, 'coding_problems', prob.id), prob, { merge: true });
+    });
+
+    await batch.commit();
+    console.log('[Storage] saveCodingProblems -> synced to Firestore & LocalStorage ✓', clean.length, 'problems');
   } catch (e) {
     console.error('[Storage] saveCodingProblems FAILED:', e);
   }
 }
+
 
 // ─────────────────────────────────────────────
 // SUBJECT-SPECIFIC CODING CONFIGS (LocalStorage)
@@ -603,11 +545,23 @@ function saveSubjectCodingConfig(subjectId, config) {
   }
 }
 
-function loadSubjectCodingProblems(subjectId) {
+function loadSubjectCodingProblems(subjectId, subjectsList = []) {
   try {
+    // 1. Kiểm tra trong subjectsList (nếu có từ Firestore)
+    if (Array.isArray(subjectsList) && subjectsList.length > 0) {
+      const sub = subjectsList.find(s => s.id === subjectId);
+      if (sub && Array.isArray(sub.codingProblems) && sub.codingProblems.length > 0) {
+        const clean = filterOldTestProblems(sub.codingProblems);
+        localStorage.setItem(`qm_subj_coding_probs_${subjectId}`, JSON.stringify(clean));
+        return clean;
+      }
+    }
+
+    // 2. Lấy từ LocalStorage
     const data = localStorage.getItem(`qm_subj_coding_probs_${subjectId}`);
     if (!data) return [];
     let problems = JSON.parse(data);
+    problems = filterOldTestProblems(problems);
     problems = problems.map(p => {
       if (p.templates && p.templates.javascript) {
         const { javascript, ...rest } = p.templates;
@@ -622,11 +576,40 @@ function loadSubjectCodingProblems(subjectId) {
   }
 }
 
-function saveSubjectCodingProblems(subjectId, problems) {
+async function saveSubjectCodingProblems(subjectId, problems) {
   try {
-    localStorage.setItem(`qm_subj_coding_probs_${subjectId}`, JSON.stringify(problems));
+    const clean = filterOldTestProblems(problems);
+    localStorage.setItem(`qm_subj_coding_probs_${subjectId}`, JSON.stringify(clean));
+
+    // Cập nhật trực tiếp Firestore document của môn học
+    await updateDoc(doc(db, 'subjects', subjectId), {
+      codingProblems: clean,
+      isCoding: true,
+    }).catch(async () => {
+      // Nếu doc chưa có field, set merge
+      await setDoc(doc(db, 'subjects', subjectId), { codingProblems: clean, isCoding: true }, { merge: true });
+    });
+    console.log('[Storage] saveSubjectCodingProblems -> saved to Firestore & LocalStorage ✓');
   } catch (e) {
     console.error('[Storage] saveSubjectCodingProblems FAILED:', e);
+  }
+}
+
+// ─────────────────────────────────────────────
+// LOCK USER (Khóa tài khoản trực tiếp qua Firestore)
+// ─────────────────────────────────────────────
+async function lockUserById(userId, reason = 'Vi phạm bảo mật') {
+  try {
+    await updateDoc(doc(db, 'users', userId), {
+      status: 'Locked',
+      lockedAt: new Date().toISOString(),
+      lockReason: reason,
+    });
+    console.log(`[Storage] lockUserById -> User ${userId} đã bị khóa. Lý do: ${reason}`);
+    return true;
+  } catch (e) {
+    console.error('[Storage] lockUserById FAILED:', e);
+    return false;
   }
 }
 
@@ -648,4 +631,5 @@ export const storage = {
   saveSubjectCodingConfig,
   loadSubjectCodingProblems,
   saveSubjectCodingProblems,
+  lockUserById,
 };

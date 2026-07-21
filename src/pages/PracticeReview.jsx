@@ -9,28 +9,19 @@ export default function PracticeReview() {
   const location = useLocation();
 
   // Fallback data if page is loaded directly without state
-  const reviewData = location.state || {
-    title: 'Đề thi THPT Quốc Gia - Toán học',
-    score: 8.5,
-    correctCount: 17,
-    totalCount: 20,
-    questions: [
-      {
-        id: 1,
-        text: 'Trong không gian Oxyz, mặt phẳng (P): 2x - y + 3z - 5 = 0 có một vectơ pháp tuyến là:',
-        options: ['n1 = (2; -1; 3)', 'n2 = (-2; 1; 3)', 'n3 = (2; 1; -3)', 'n4 = (2; -1; -5)'],
-        userAnswer: 0,
-        correctAnswer: 0
-      },
-      {
-        id: 2,
-        text: 'Hàm số y = x^3 - 3x + 1 đồng biến trên khoảng nào dưới đây?',
-        options: ['(-1; 1)', '(-inf; -1) và (1; +inf)', '(-inf; 1)', '(-1; +inf)'],
-        userAnswer: 0,
-        correctAnswer: 1
-      }
-    ]
-  };
+  const reviewData = location.state || null;
+
+  if (!reviewData) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center">
+        <h2 className="text-xl font-bold mb-2">Không tìm thấy dữ liệu xem lại bài làm</h2>
+        <p className="text-slate-400 text-sm mb-6 max-w-md">Vui lòng hoàn thành bài làm thực tế từ trang chính để xem lại kết quả.</p>
+        <Button onClick={() => navigate('/client/dashboard')} className="font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 py-2.5 shadow-md">
+          Quay về Trang chính
+        </Button>
+      </div>
+    );
+  }
 
   const { title, score, correctCount, totalCount, questions } = reviewData;
 

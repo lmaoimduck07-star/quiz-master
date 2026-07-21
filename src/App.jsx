@@ -12,6 +12,8 @@ import CodingReview from "./pages/coding/CodingReview";
 import { AuthProvider } from "./context/AuthContext";
 import PrivateRoute from "./components/PrivateRoute";
 
+import NotFound from "./pages/NotFound";
+
 function App() {
   return (
     <AuthProvider>
@@ -84,6 +86,7 @@ function App() {
               </PrivateRoute>
             } 
           />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

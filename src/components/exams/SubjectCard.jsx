@@ -17,9 +17,9 @@ export default function SubjectCard({ subject, onDelete, onOpen, onUpdate }) {
     // Đồng bộ trạng thái code dựa trên trường status của môn học từ Firebase
     const isCodingSub = subject.status === 'developer';
     setIsCoding(isCodingSub);
-    
+
     if (isCodingSub) {
-      const probs = storage.loadSubjectCodingProblems(subject.id);
+      const probs = storage.loadSubjectCodingProblems(subject.id, [subject]);
       setCodingCount(probs.length);
     } else {
       setCodingCount(0);
@@ -31,7 +31,7 @@ export default function SubjectCard({ subject, onDelete, onOpen, onUpdate }) {
     e.preventDefault();
     const nextState = !isCoding;
     setTargetState(nextState);
-    
+
     // Sinh mã ngẫu nhiên
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setVerificationCode(code);
@@ -50,21 +50,20 @@ export default function SubjectCard({ subject, onDelete, onOpen, onUpdate }) {
       ...subject,
       status: targetState ? 'developer' : 'normal'
     });
-    
+
     setShowConfirmModal(false);
   };
 
   return (
     <div className={`relative flex items-center justify-between p-6 bg-white dark:bg-slate-900 border rounded-xl transition hover:shadow-lg transform hover:-translate-y-1 ${isCompleted ? 'border-emerald-500 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20' : 'border-slate-200 dark:border-slate-800'}`}>
-      
+
       <div className="flex items-center gap-4 flex-1">
-        <div className={`p-4 rounded-xl ${
-          isCoding 
-            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' 
-            : isCompleted 
-            ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' 
-            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-350'
-        }`}>
+        <div className={`p-4 rounded-xl ${isCoding
+            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+            : isCompleted
+              ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-350'
+          }`}>
           {isCoding ? (
             <Code2 className="h-8 w-8" />
           ) : isCompleted ? (
@@ -78,20 +77,20 @@ export default function SubjectCard({ subject, onDelete, onOpen, onUpdate }) {
             <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 m-0 leading-snug truncate">
               {subject.name}
             </h3>
-            
+
             {/* Nút gạt chuyển chế độ Code bên cạnh tiêu đề môn học */}
             <label className="relative inline-flex items-center cursor-pointer select-none">
-              <input 
-                type="checkbox" 
-                checked={isCoding} 
-                onChange={handleToggleClick} 
-                className="sr-only peer" 
+              <input
+                type="checkbox"
+                checked={isCoding}
+                onChange={handleToggleClick}
+                className="sr-only peer"
               />
               <div className="relative w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
               <span className="ml-1.5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Chế độ Code</span>
             </label>
           </div>
-          
+
           <p className="text-sm text-slate-500 dark:text-slate-400 font-semibold m-0 mt-1 flex items-center gap-2">
             {isCoding ? (
               <span>{codingCount} Đề thi lập trình (Code)</span>
@@ -103,7 +102,7 @@ export default function SubjectCard({ subject, onDelete, onOpen, onUpdate }) {
       </div>
 
       <div className="flex gap-3">
-        <Button 
+        <Button
           variant={isCompleted ? "success" : isCoding ? "primary" : "primary"}
           onClick={() => onOpen(subject.id)}
           className="h-12 px-6 font-bold"
@@ -111,7 +110,7 @@ export default function SubjectCard({ subject, onDelete, onOpen, onUpdate }) {
           {isCompleted ? 'Xem Môn Này' : <><span className="mr-2">Vào Môn Này</span> <ArrowRight className="h-4 w-4" /></>}
         </Button>
 
-        <Button 
+        <Button
           variant="outline"
           onClick={() => onDelete(subject.id)}
           className="h-12 w-12 p-0 text-red-500 hover:text-white hover:bg-red-600 border-red-200 dark:border-red-900/40 bg-transparent animate-none"
@@ -129,7 +128,7 @@ export default function SubjectCard({ subject, onDelete, onOpen, onUpdate }) {
               <ShieldAlert className="h-6 w-6" />
               <h3 className="font-extrabold text-sm uppercase tracking-wider">Xác nhận chuyển chế độ</h3>
             </div>
-            
+
             <p className="text-xs text-slate-600 dark:text-slate-350 leading-relaxed font-semibold">
               Bạn có chắc chắn muốn chuyển môn học <strong>{subject.name}</strong> sang{' '}
               <strong>{targetState ? 'CHẾ ĐỘ THI CODE' : 'CHẾ ĐỘ TRẮC NGHIỆM'}</strong> không?

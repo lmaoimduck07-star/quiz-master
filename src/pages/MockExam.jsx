@@ -53,20 +53,23 @@ export default function MockExam() {
     return null;
   })();
 
-  // Extract state passed from ClientDashboard or fall back to saved session / default
-  const examData = savedSession?.examData || location.state || {
-    examId: 'mock_toan',
-    title: 'Đề thi THPT Quốc Gia - Toán học',
-    questions: [
-      { id: 'q1', content: 'Trong không gian Oxyz, mặt phẳng (P): 2x - y + 3z - 5 = 0 có một vectơ pháp tuyến là:', options: ['n = (2; -1; 3)', 'n = (-2; 1; 3)', 'n = (2; 1; -3)', 'n = (2; -1; -5)'], answer: 0 },
-      { id: 'q2', content: 'Hàm số y = x^3 - 3x + 1 đồng biến trên khoảng nào dưới đây?', options: ['(-1; 1)', '(-inf; -1) và (1; +inf)', '(-inf; 1)', '(-1; +inf)'], answer: 1 }
-    ],
-    timeLimit: 90 * 60,
-    mode: 'practice',
-    subjectName: 'Toán học'
-  };
+  // Extract state passed from ClientDashboard or fall back to saved session
+  const examData = savedSession?.examData || location.state || null;
 
-  const { examId, title, questions, timeLimit, mode, subjectName } = examData;
+  if (!examData) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center">
+        <AlertTriangle className="h-12 w-12 text-amber-400 mb-4 animate-bounce" />
+        <h2 className="text-xl font-bold mb-2">Chưa có bài thi nào được chọn</h2>
+        <p className="text-slate-400 text-sm mb-6 max-w-md">Vui lòng chọn môn học và bài thi thực tế từ trang chính để bắt đầu làm bài.</p>
+        <Button onClick={() => navigate('/client/dashboard')} className="font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 py-2.5 shadow-md">
+          Quay về Trang chính
+        </Button>
+      </div>
+    );
+  }
+
+  const { examId, title, questions = [], timeLimit = 15 * 60, mode, subjectName } = examData;
 
   const [examSessionCode] = useState(() => {
     return savedSession?.examSessionCode || location.state?.examSessionCode || ('sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9));

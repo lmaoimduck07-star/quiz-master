@@ -1,243 +1,276 @@
 // src/pages/coding/CodingReview.jsx
-import React, { useEffect, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent } from '../../components/ui/Card';
-import { Trophy, CheckCircle2, AlertTriangle, ArrowRight, ShieldCheck, MessageSquare, Terminal, ChevronRight, XCircle, Sparkles } from 'lucide-react';
+import {
+  Trophy, ArrowRight, ShieldCheck, MessageSquare,
+  Terminal, Code2, Star, AlertTriangle
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getSession, clearSession } from '../../utils/codingSession';
+import Editor from '@monaco-editor/react';
+import { useState } from 'react';
+
+// ── Tính điểm ──────────────────────────────────────────────────────────────
+function calcScores(session) {
+  const vivaScore = typeof session?.vivaScore === 'number' ? session.vivaScore : null;
+  const aiCodeScore = typeof session?.aiCodeScore === 'number' ? session.aiCodeScore : null;
+
+  if (vivaScore === null) return { vivaScore: null, aiCodeScore, finalScore: null };
+
+  const code = aiCodeScore ?? 6.5;
+  const finalScore = parseFloat((code * 0.35 + vivaScore * 0.65).toFixed(1));
+  return { vivaScore, aiCodeScore: code, finalScore };
+}
+
+function ScoreRing({ score, label, color, max = 10 }) {
+  const pct = score !== null ? Math.round((score / max) * 100) : 0;
+  const grade =
+    score === null ? '—' :
+    score >= 8.5 ? 'Xuất sắc' :
+    score >= 7.0 ? 'Tốt' :
+    score >= 5.0 ? 'Khá' :
+    'Cần cải thiện';
+
+  return (
+    <div className="flex flex-col items-center gap-2 p-5">
+      <div className="relative w-20 h-20">
+        <svg className="w-full h-full -rotate-90" viewBox="0 0 80 80">
+          <circle cx="40" cy="40" r="34" fill="none" stroke="#1e293b" strokeWidth="8" />
+          <circle
+            cx="40" cy="40" r="34" fill="none"
+            stroke={color} strokeWidth="8"
+            strokeDasharray={`${2 * Math.PI * 34}`}
+            strokeDashoffset={`${2 * Math.PI * 34 * (1 - pct / 100)}`}
+            strokeLinecap="round"
+            className="transition-all duration-1000"
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-xl font-black text-white">
+            {score !== null ? score.toFixed(1) : '—'}
+          </span>
+        </div>
+      </div>
+      <div className="text-center">
+        <div className="text-xs font-bold text-slate-400">{label}</div>
+        <div className="text-[10px] font-bold mt-0.5" style={{ color }}>{grade}</div>
+      </div>
+    </div>
+  );
+}
 
 export default function CodingReview() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { currentUser } = useAuth();
+  const userId = currentUser?.id || currentUser?.uid;
+  const session = getSession(userId);
 
-  // Đọc dữ liệu từ session
-  const session = getSession(currentUser?.uid);
-
-  // Nếu không có session, redirect về dashboard
-  useEffect(() => {
-    if (!session) {
-      navigate('/coding/dashboard');
-    }
-  }, [session, navigate]);
-
-  const problem = session?.problem || { title: 'Bài thi' };
-  const code = session?.code || '';
-  const testResults = session?.testResults || { passedCount: 0, totalCount: 1, results: [] };
-  const vivaScore = session?.vivaScore || 0;
+  const problem = session?.problem || { title: 'Bài thi lập trình' };
+  const language = session?.selectedLang || 'python';
+  const chatHistory = session?.chatHistory || [];
   const feedback = session?.feedback || '';
   const summary = session?.summary || '';
-  const chatHistory = session?.chatHistory || [];
+  const lastOutput = session?.lastOutput || '';
 
-  const reviewFiles = session?.files || (code ? { 'Solution': code } : { 'Không có code': '' });
-  const [activeReviewFile, setActiveReviewFile] = useState(Object.keys(reviewFiles)[0]);
+  const code = (() => {
+    if (session?.files) {
+      const main = Object.keys(session.files)[0];
+      return session.files[main] || '';
+    }
+    return session?.code || '';
+  })();
 
-  const codeScore = parseFloat(((testResults.passedCount / testResults.totalCount) * 10).toFixed(1));
-  const finalScore = parseFloat(((codeScore * 0.6) + (vivaScore * 0.4)).toFixed(1));
+  const { vivaScore, aiCodeScore, finalScore } = calcScores(session);
+  const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'code' | 'output'
 
   const handleFinish = () => {
-    // Xóa session khi hoàn tất
-    if (currentUser?.uid) {
-      clearSession(currentUser.uid);
-    }
+    clearSession(userId);
     navigate('/coding/dashboard');
   };
 
+  const monacoLang = language === 'cpp' ? 'cpp' : language === 'c' ? 'c' : language === 'java' ? 'java' : 'python';
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans overflow-y-auto p-6 md:p-8">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+
       {/* Header */}
-      <header className="max-w-4xl mx-auto w-full flex items-center justify-between pb-6 border-b border-slate-900 mb-8 shrink-0">
+      <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 py-4 px-8 flex items-center justify-between sticky top-0 z-10">
         <div>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Kết quả thi tự luận</span>
-          <h1 className="text-2xl font-black text-white">{problem.title}</h1>
+          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Kết quả thi lập trình</div>
+          <h1 className="text-xl font-black text-white">{problem.title}</h1>
         </div>
         <Button
           onClick={handleFinish}
-          className="font-bold text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md h-10 px-5 flex items-center gap-1 border-transparent"
+          className="font-bold text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md h-10 px-5 flex items-center gap-1.5 border-transparent"
         >
           Hoàn tất thi <ArrowRight className="h-4 w-4" />
         </Button>
       </header>
 
-      {/* Main content grid */}
-      <main className="max-w-4xl mx-auto w-full space-y-6">
-        
-        {/* Scores Overview Row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Card 1: Final overall score */}
-          <Card className="border-slate-800 bg-gradient-to-br from-blue-950/40 to-slate-900 rounded-3xl overflow-hidden shadow-lg">
-            <CardContent className="p-6 text-center space-y-2">
-              <Trophy className="h-10 w-10 text-yellow-400 mx-auto animate-pulse" />
-              <div className="text-3xl font-black text-white">{finalScore}/10</div>
-              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Điểm tổng kết</div>
-              <div className="text-[9px] text-slate-500 font-semibold">(60% Điểm Code + 40% Điểm Vấn đáp)</div>
-            </CardContent>
-          </Card>
+      <main className="max-w-4xl mx-auto w-full p-6 md:p-8 space-y-6 pb-16">
 
-          {/* Card 2: Code compile score */}
-          <Card className="border-slate-800 bg-slate-900 rounded-3xl overflow-hidden shadow-md">
-            <CardContent className="p-6 text-center space-y-2">
-              <CheckCircle2 className="h-10 w-10 text-emerald-400 mx-auto" />
-              <div className="text-3xl font-black text-white">{codeScore}/10</div>
-              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Điểm chấm Code</div>
-              <div className="text-[10px] text-emerald-500 font-bold">
-                {testResults.isAiEvaluated 
-                  ? `Đạt ${testResults.passedCount}/${testResults.totalCount} Yêu cầu AI`
-                  : `Đạt ${testResults.passedCount}/${testResults.totalCount} Testcases`}
-              </div>
-            </CardContent>
-          </Card>
+        {/* Viva chưa hoàn thành */}
+        {vivaScore === null && (
+          <div className="bg-amber-950/30 border border-amber-800/40 rounded-2xl p-5 flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-bold text-amber-300 text-sm">Vấn đáp chưa hoàn thành</div>
+              <div className="text-xs text-amber-400/80 mt-0.5">Điểm tổng không thể tính vì chưa hoàn thành phần vấn đáp AI.</div>
+            </div>
+          </div>
+        )}
 
-          {/* Card 3: AI Viva score */}
-          <Card className="border-slate-800 bg-slate-900 rounded-3xl overflow-hidden shadow-md">
-            <CardContent className="p-6 text-center space-y-2">
-              <ShieldCheck className="h-10 w-10 text-blue-400 mx-auto" />
-              <div className="text-3xl font-black text-white">{vivaScore}/10</div>
-              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Điểm Vấn đáp AI</div>
-              <div className="text-[10px] text-blue-500 font-bold">
-                Giám khảo AI đánh giá
+        {/* Score overview */}
+        <Card className="border-slate-800 bg-gradient-to-br from-slate-900 to-blue-950/20 rounded-3xl overflow-hidden shadow-xl">
+          <CardContent className="p-6">
+            <div className="flex flex-col items-center gap-2 mb-6">
+              <Trophy className="h-8 w-8 text-yellow-400" />
+              <h2 className="text-2xl font-black text-white">
+                {finalScore !== null ? `${finalScore}/10` : 'Chưa có điểm'}
+              </h2>
+              <p className="text-slate-400 text-sm">Điểm tổng kết</p>
+            </div>
+
+            <div className="flex justify-center gap-4 flex-wrap">
+              <ScoreRing score={aiCodeScore} label="Điểm Code (35%)" color="#3b82f6" />
+              <div className="flex flex-col items-center justify-center gap-1 px-4">
+                <div className="text-2xl font-black text-slate-600">×</div>
               </div>
+              <ScoreRing score={vivaScore} label="Vấn đáp (65%)" color="#a78bfa" />
+            </div>
+
+            {/* Score formula */}
+            {finalScore !== null && (
+              <div className="mt-4 text-center text-xs text-slate-500 font-mono bg-slate-950/50 rounded-xl p-2">
+                {aiCodeScore?.toFixed(1)} × 0.35 + {vivaScore?.toFixed(1)} × 0.65 ={' '}
+                <span className="text-white font-black">{finalScore}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* AI Summary */}
+        {(summary || feedback) && (
+          <Card className="border-slate-800 bg-slate-900/60 rounded-3xl overflow-hidden">
+            <CardContent className="p-6 space-y-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Star className="h-5 w-5 text-yellow-400" />
+                <h3 className="font-black text-white">Nhận xét từ Giám khảo AI</h3>
+              </div>
+              {summary && (
+                <div className="bg-blue-950/20 border border-blue-900/30 rounded-2xl p-4">
+                  <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">Tóm tắt</div>
+                  <p className="text-slate-200 text-sm leading-relaxed">{summary}</p>
+                </div>
+              )}
+              {feedback && (
+                <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-4">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nhận xét chi tiết</div>
+                  <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">{feedback}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
+        )}
+
+        {/* Tabs: Chat | Code | Output */}
+        <div>
+          <div className="flex gap-2 mb-4">
+            {[
+              { key: 'chat', label: 'Lịch sử vấn đáp', icon: MessageSquare },
+              { key: 'code', label: 'Code đã nộp', icon: Code2 },
+              { key: 'output', label: 'Output terminal', icon: Terminal },
+            ].map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition ${
+                  activeTab === key
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-900 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" /> {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab: Chat */}
+          {activeTab === 'chat' && (
+            <Card className="border-slate-800 bg-slate-900/60 rounded-3xl overflow-hidden">
+              <CardContent className="p-6 space-y-4 max-h-[500px] overflow-y-auto">
+                {chatHistory.length === 0 ? (
+                  <p className="text-slate-500 text-sm text-center py-8">Không có lịch sử vấn đáp.</p>
+                ) : (
+                  chatHistory.map((msg, i) => (
+                    <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      {msg.role === 'assistant' && (
+                        <div className="h-7 w-7 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0 mt-1">
+                          <ShieldCheck className="h-3.5 w-3.5" />
+                        </div>
+                      )}
+                      <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                        msg.role === 'assistant'
+                          ? 'bg-slate-800 text-slate-200 rounded-tl-sm'
+                          : 'bg-blue-600/30 text-blue-100 rounded-tr-sm border border-blue-700/30'
+                      }`}>
+                        {msg.role === 'assistant' && (
+                          <div className="text-[9px] font-bold text-blue-400 mb-1 uppercase tracking-wider">Giám khảo</div>
+                        )}
+                        <p className="whitespace-pre-wrap">{msg.text}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Tab: Code */}
+          {activeTab === 'code' && (
+            <div className="border border-slate-800 rounded-3xl overflow-hidden h-80">
+              <Editor
+                height="100%"
+                language={monacoLang}
+                theme="vs-dark"
+                value={code}
+                options={{
+                  readOnly: true,
+                  fontSize: 13,
+                  minimap: { enabled: false },
+                  scrollbar: { vertical: 'auto' },
+                  padding: { top: 12 },
+                  fontFamily: "'Fira Code', monospace",
+                }}
+              />
+            </div>
+          )}
+
+          {/* Tab: Output */}
+          {activeTab === 'output' && (
+            <Card className="border-slate-800 bg-slate-900/60 rounded-3xl overflow-hidden">
+              <CardContent className="p-0">
+                <div className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex items-center gap-2 text-xs text-slate-400 font-bold">
+                  <Terminal className="h-3.5 w-3.5 text-blue-400" /> Output khi nộp bài
+                </div>
+                <div className="p-4 font-mono text-xs text-slate-300 max-h-72 overflow-y-auto bg-black/40 whitespace-pre-wrap leading-5">
+                  {lastOutput || '(Không có output)'}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
-        {/* AI Performance Evaluation and summary */}
-        <Card className="border-slate-800 bg-slate-900 rounded-3xl overflow-hidden shadow-md">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-              <Sparkles className="h-5 w-5 text-yellow-400" />
-              <h3 className="font-bold text-slate-200">Đánh giá chung của Hội đồng AI</h3>
-            </div>
-            <p className="text-xs text-blue-400 font-bold leading-relaxed">
-              "{summary}"
-            </p>
-            <div className="h-px bg-slate-800" />
-            <div className="space-y-1.5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Báo cáo nhận xét chi tiết</span>
-              <p className="text-xs text-slate-350 leading-relaxed whitespace-pre-line">
-                {feedback}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Mã nguồn bài làm */}
-        <Card className="border-slate-800 bg-slate-900 rounded-3xl overflow-hidden shadow-md">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-              <Sparkles className="h-5 w-5 text-blue-400" />
-              <h3 className="font-bold text-slate-200">Mã nguồn bài làm</h3>
-            </div>
-            
-            {/* File selection tabs */}
-            <div className="flex flex-wrap gap-1.5 border-b border-slate-800 pb-2">
-              {Object.keys(reviewFiles).map((fileName) => {
-                const isActive = fileName === activeReviewFile;
-                return (
-                  <button
-                    key={fileName}
-                    onClick={() => setActiveReviewFile(fileName)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition select-none ${
-                      isActive
-                        ? 'bg-slate-800 text-blue-400 border border-slate-700'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
-                    }`}
-                  >
-                    {fileName}
-                  </button>
-                );
-              })}
-            </div>
-            
-            {/* Code view panel */}
-            <div className="bg-slate-950 p-4 border border-slate-850 rounded-2xl overflow-x-auto max-h-[400px]">
-              <pre className="font-mono text-xs text-slate-350 leading-relaxed whitespace-pre text-left">
-                <code>{reviewFiles[activeReviewFile]}</code>
-              </pre>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Testcases Review Details */}
-        <Card className="border-slate-800 bg-slate-900 rounded-3xl overflow-hidden shadow-md">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-              <Terminal className="h-5 w-5 text-emerald-400" />
-              <h3 className="font-bold text-slate-200">
-                {testResults.isAiEvaluated ? 'Kết quả Thẩm định AI' : 'Chi tiết chạy Test Cases'}
-              </h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {testResults.results.map((r) => (
-                <div key={r.id} className={`p-4 border rounded-2xl flex flex-col justify-between gap-3 ${
-                  r.passed 
-                    ? 'border-emerald-500/10 bg-emerald-950/10' 
-                    : 'border-red-500/10 bg-red-950/10'
-                }`}>
-                  <div className="flex justify-between items-start">
-                    <span className="text-xs font-bold text-slate-200">
-                      {testResults.isAiEvaluated ? `Tiêu chí ${r.id}` : `Test Case ${r.id}`}
-                    </span>
-                    {r.passed ? (
-                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">Thành công</span>
-                    ) : (
-                      <span className="text-[10px] font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded">Thất bại</span>
-                    )}
-                  </div>
-                  <div className="space-y-1 font-mono text-[10px] text-slate-400">
-                    {testResults.isAiEvaluated ? (
-                      <>
-                        <div>Yêu cầu: <span className="text-slate-300 font-sans block pt-0.5">{r.input}</span></div>
-                        <div className="pt-1">Chi tiết: <span className={r.passed ? "text-emerald-400 font-sans block pt-0.5" : "text-red-400 font-sans block pt-0.5"}>{r.actual}</span></div>
-                      </>
-                    ) : (
-                      <>
-                        <div>Input: <span className="text-slate-300">{r.input}</span></div>
-                        <div>Đầu ra: <span className="text-slate-300">{r.actual}</span></div>
-                        <div>Kỳ vọng: <span className="text-slate-300">{r.expected}</span></div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Viva Chat dialogue History */}
-        <Card className="border-slate-800 bg-slate-900 rounded-3xl overflow-hidden shadow-md">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-              <MessageSquare className="h-5 w-5 text-blue-400" />
-              <h3 className="font-bold text-slate-200">Biên bản cuộc vấn đáp 5 câu</h3>
-            </div>
-            
-            <div className="space-y-4">
-              {chatHistory.slice(0, 10).map((msg, index) => {
-                const isAssistant = msg.role === 'assistant';
-                return (
-                  <div key={index} className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`text-[10px] font-black uppercase tracking-wider ${
-                        isAssistant ? 'text-blue-400' : 'text-emerald-400'
-                      }`}>
-                        {isAssistant ? 'Giám khảo AI' : 'Sinh viên'}
-                      </span>
-                    </div>
-                    <p className={`text-xs p-3 rounded-xl ${
-                      isAssistant 
-                        ? 'bg-slate-950 text-slate-200' 
-                        : 'bg-blue-600/10 border border-blue-500/20 text-slate-300'
-                    }`}>
-                      {msg.text}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Finish button */}
+        <div className="flex justify-center pt-4">
+          <Button
+            onClick={handleFinish}
+            className="font-bold text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-lg h-12 px-10 flex items-center gap-2 border-transparent"
+          >
+            <Trophy className="h-4 w-4" /> Hoàn tất & Về trang chủ
+          </Button>
+        </div>
       </main>
     </div>
   );

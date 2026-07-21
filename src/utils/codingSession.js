@@ -23,17 +23,21 @@ export const getSession = (userId) => {
 
 // Tạo session mới (khi bắt đầu làm bài)
 export const createSession = (userId, { problem, selectedLang }) => {
+  const initCode = problem.templates?.[selectedLang] || '';
+  const mainFileName = selectedLang === 'java' ? 'Solution.java' : selectedLang === 'cpp' ? 'Solution.cpp' : selectedLang === 'c' ? 'solution.c' : 'solution.py';
   const session = {
     userId,
     problemId: problem.id,
     problem,
     selectedLang,
-    code: problem.templates?.[selectedLang] || '',
-    testResults: null,
-    stage: 'workspace', // workspace → viva → review
+    code: initCode,
+    files: { [mainFileName]: initCode },
+    lastOutput: '',       // Output terminal khi nộp bài (AI dùng để hỏi vấn đáp)
+    stage: 'workspace',   // workspace → viva → review
     chatHistory: [],
     vivaQuestionIndex: 1,
     vivaScore: null,
+    aiCodeScore: null,    // Điểm code do AI chấm (0-10)
     feedback: null,
     summary: null,
     createdAt: Date.now(),

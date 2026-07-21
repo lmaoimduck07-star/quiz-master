@@ -6,6 +6,9 @@ import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { BookOpen, Clock, LogOut, ShieldAlert, Award, FileText, ChevronRight, Play, X, Sun, Moon, Award as AwardIcon, TrendingUp, Calendar, AlertTriangle, Loader2, Code2 } from 'lucide-react';
 
+// 🔧 Chế độ bảo trì cổng lập trình — đặt true để tạm khóa truy cập, false để mở lại
+const CODING_MAINTENANCE = false;
+
 export default function ClientDashboard() {
   const navigate = useNavigate();
   const { currentUser, logout, activeRole, setActiveRole } = useAuth();
@@ -22,6 +25,7 @@ export default function ClientDashboard() {
   const [codingStep, setCodingStep] = useState(0);
 
   const handleEnterCoding = (subjectId = null) => {
+    if (CODING_MAINTENANCE) return; // Chặn khi đang bảo trì
     const cleanSubjectId = typeof subjectId === 'string' ? subjectId : null;
     setIsEnteringCoding(true);
     setCodingStep(0);
@@ -282,7 +286,12 @@ export default function ClientDashboard() {
                 <p className={`text-sm font-medium ${hasCodingPermission ? 'text-blue-100' : 'text-slate-300'}`}>
                   Môi trường thi lập trình tự luận trực tuyến, chấm điểm testcases tự động và hỏi đáp trực tiếp 1:1 với Giám khảo AI.
                 </p>
-                {!hasCodingPermission && (
+                {CODING_MAINTENANCE && (
+                  <p className="mt-2 text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                    🔧 Cổng lập trình đang tạm ngừng để bảo trì nâng cấp hệ thống. Vui lòng quay lại sau.
+                  </p>
+                )}
+                {!CODING_MAINTENANCE && !hasCodingPermission && (
                   <p className="mt-2 text-xs font-bold text-amber-300 flex items-center gap-1.5">
                     🔒 Bạn chưa được cấp quyền truy cập. Vui lòng liên hệ Admin để được cấp quyền.
                   </p>
@@ -290,14 +299,16 @@ export default function ClientDashboard() {
               </div>
               <Button 
                 onClick={handleEnterCoding}
-                disabled={!hasCodingPermission}
+                disabled={CODING_MAINTENANCE || !hasCodingPermission}
                 className={`w-full md:w-auto font-bold h-12 px-6 rounded-xl shadow-md shrink-0 border-transparent ${
-                  hasCodingPermission 
+                  CODING_MAINTENANCE
+                    ? 'bg-amber-500/20 text-amber-200 dark:bg-amber-500/10 dark:text-amber-300 cursor-not-allowed'
+                    : hasCodingPermission 
                     ? 'bg-white hover:bg-slate-50 text-blue-600 dark:bg-white dark:hover:bg-slate-100 dark:text-blue-600' 
                     : 'bg-white/20 text-white/60 dark:bg-white/10 dark:text-white/40 cursor-not-allowed'
                 }`}
               >
-                {hasCodingPermission ? 'Vào Cổng thi Lập trình' : '🔒 Chưa có quyền truy cập'}
+                {CODING_MAINTENANCE ? '🔧 Đang bảo trì' : hasCodingPermission ? 'Vào Cổng thi Lập trình' : '🔒 Chưa có quyền truy cập'}
               </Button>
             </div>
           );
@@ -323,7 +334,7 @@ export default function ClientDashboard() {
               {subjects.map((subject) => {
                 const totalExams = subject.exams ? subject.exams.length : 0;
                 const isCodingSub = subject.status === 'developer';
-                const codingCount = isCodingSub ? storage.loadSubjectCodingProblems(subject.id).length : 0;
+                const codingCount = isCodingSub ? storage.loadSubjectCodingProblems(subject.id, subjects).length : 0;
                 return (
                   <Card key={subject.id} className="border-0 shadow-sm hover:shadow-md transition duration-200 rounded-3xl overflow-hidden bg-white dark:bg-slate-900 p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
                     {/* Left: Info */}
@@ -363,10 +374,17 @@ export default function ClientDashboard() {
                     <div className="flex gap-3 shrink-0 w-full md:w-auto">
                       {isCodingSub ? (
                         <Button
-                          className="w-full md:w-auto font-bold h-11 px-6 rounded-xl gap-1.5 shadow-sm bg-blue-600 hover:bg-blue-700 text-white border-transparent"
+                          className={`w-full md:w-auto font-bold h-11 px-6 rounded-xl gap-1.5 shadow-sm border-transparent ${
+                            CODING_MAINTENANCE 
+                              ? 'bg-amber-600/80 hover:bg-amber-600 text-amber-100 cursor-not-allowed' 
+                              : 'bg-blue-600 hover:bg-blue-700 text-white'
+                          }`}
                           onClick={() => handleEnterCoding(subject.id)}
+                          disabled={CODING_MAINTENANCE}
                         >
-                          <Code2 className="h-4 w-4" /> Vào Cổng Lập trình
+                          {CODING_MAINTENANCE 
+                            ? <><AlertTriangle className="h-4 w-4" /> Đang bảo trì</> 
+                            : <><Code2 className="h-4 w-4" /> Vào Cổng Lập trình</>}
                         </Button>
                       ) : (
                         <>

@@ -1,7 +1,9 @@
-import { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
-import { auth, googleProvider } from '../firebase/config';
+import { auth, googleProvider, db } from '../firebase/config';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { storage } from '../utils/storage';
+import { useF12Detector } from '../hooks/useF12Detector';
 
 const AuthContext = createContext(null);
 
@@ -12,7 +14,39 @@ export function AuthProvider({ children }) {
   });
   const [activeRole, setActiveRole] = useState(() => localStorage.getItem('qm_active_role') || null);
   const [redirectError, setRedirectError] = useState(null);
+  const [lockedByF12, setLockedByF12] = useState(false);
   const isAuthInProgress = useRef(false);
+
+  // Callback khi F12 phát hiện khóa tài khoản
+  const handleF12Locked = useCallback(async () => {
+    setLockedByF12(true);
+    // Xóa session
+    if (localStorage.getItem('qm_google_session') === 'true') {
+      try { await signOut(auth); } catch (_) { }
+      localStorage.removeItem('qm_google_session');
+    }
+    setCurrentUser(null);
+    setActiveRole(null);
+    localStorage.removeItem('qm_current_user');
+    localStorage.removeItem('qm_active_role');
+    localStorage.removeItem('qm_active_session');
+    localStorage.removeItem('qm_expired_sessions');
+    // Alert sau khi đã clear state
+    setTimeout(() => {
+      alert(
+        '🔒 TÀI KHOẢN ĐÃ BỊ KHÓA\n\n' +
+        'Tài khoản của bạn đã bị khóa tự động do mở DevTools/F12 quá số lần cho phép.\n' +
+        'Vui lòng liên hệ Admin để được hỗ trợ mở khóa.'
+      );
+    }, 100);
+  }, []);
+
+  // Kích hoạt F12 detector (chỉ cho Student, không áp dụng Admin)
+  useF12Detector({
+    currentUser: activeRole === 'Student' ? currentUser : null,
+    onLocked: handleF12Locked,
+    enabled: !!currentUser && activeRole === 'Student',
+  });
 
   // Theo dõi Firebase session hết hạn
   useEffect(() => {
@@ -28,6 +62,51 @@ export function AuthProvider({ children }) {
     });
     return () => unsubscribe();
   }, []);
+
+  // ─── REALTIME: Theo dõi thay đổi quyền từ Firestore ───────────────────────
+  // Khi Admin cấp/thu hồi quyền, user hiện tại sẽ được cập nhật ngay lập tức
+  // mà không cần đăng xuất và đăng nhập lại
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const userDocRef = doc(db, 'users', currentUser.id);
+    const unsubscribe = onSnapshot(userDocRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+
+      const updatedData = { id: snapshot.id, ...snapshot.data() };
+
+      // Kiểm tra tài khoản bị khóa realtime
+      if (updatedData.status === 'Locked') {
+        setCurrentUser(null);
+        setActiveRole(null);
+        localStorage.removeItem('qm_current_user');
+        localStorage.removeItem('qm_active_role');
+        localStorage.removeItem('qm_active_session');
+        localStorage.removeItem('qm_expired_sessions');
+        alert(
+          '🔒 TÀI KHOẢN ĐÃ BỊ KHÓA\n\n' +
+          'Tài khoản của bạn đã bị khóa bởi Admin.\n' +
+          'Vui lòng liên hệ Admin để được hỗ trợ mở khóa.'
+        );
+        return;
+      }
+
+      // Chỉ cập nhật nếu có thay đổi thực sự (tránh loop vô hạn)
+      const currentStr = JSON.stringify(currentUser);
+      const updatedStr = JSON.stringify(updatedData);
+      if (currentStr !== updatedStr) {
+        setCurrentUser(updatedData);
+        localStorage.setItem('qm_current_user', JSON.stringify(updatedData));
+        console.log('[AuthContext] Quyền người dùng đã được cập nhật realtime:', updatedData.permissions);
+      }
+    }, (error) => {
+      // Bỏ qua lỗi nếu Firestore không kết nối được (offline)
+      console.warn('[AuthContext] onSnapshot error (ignored):', error.message);
+    });
+
+    return () => unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
 
   // Đăng nhập username/password
   const login = async (username, password) => {
@@ -95,6 +174,17 @@ export function AuthProvider({ children }) {
       const role = user.roles?.[0] || 'Student';
       completeLogin(user, role);
       return { requiresRoleSelection: false, user, role };
+    } catch (err) {
+      if (err.code === 'auth/unauthorized-domain') {
+        throw new Error(`Tên miền ${window.location.hostname} chưa được thêm vào Authorized Domains trong Firebase Console!`);
+      }
+      if (err.code === 'auth/popup-closed-by-user') {
+        throw new Error('Cửa sổ đăng nhập Google đã bị đóng trước khi hoàn tất.');
+      }
+      if (err.code === 'auth/operation-not-allowed') {
+        throw new Error('Tính năng đăng nhập Google chưa được kích hoạt trong Firebase Console.');
+      }
+      throw err;
     } finally {
       isAuthInProgress.current = false;
     }
@@ -151,7 +241,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      currentUser, activeRole, redirectError,
+      currentUser, activeRole, redirectError, lockedByF12,
       login, loginWithGoogleReal, registerWithGoogle,
       completeLogin, logout, setActiveRole,
       clearRedirectError: () => setRedirectError(null),

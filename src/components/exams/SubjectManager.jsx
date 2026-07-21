@@ -12,7 +12,7 @@ export default function SubjectManager({ subjects, onAddSubject, onDeleteSubject
       alert("Vui lòng nhập tên môn học!");
       return;
     }
-    
+
     onAddSubject({
       id: 'sub_' + Date.now(),
       name: subName.trim(),
@@ -21,7 +21,7 @@ export default function SubjectManager({ subjects, onAddSubject, onDeleteSubject
       exams: []
     });
 
-    setSubName(''); 
+    setSubName('');
   };
 
   const activeSubs = subjects.filter(s => !s.isCompleted);
@@ -29,7 +29,7 @@ export default function SubjectManager({ subjects, onAddSubject, onDeleteSubject
 
   return (
     <div className="max-w-5xl mx-auto p-8">
-      
+
       {/* Banner */}
       <div className="flex flex-col items-center mb-10 relative">
         <div className="inline-block bg-primary/10 p-6 rounded-full text-primary mb-4">
@@ -42,13 +42,13 @@ export default function SubjectManager({ subjects, onAddSubject, onDeleteSubject
       {/* Box tạo môn mới */}
       <div className="flex flex-col md:flex-row items-center gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm mb-12 transition-colors">
         <div className="flex-1 w-full">
-          <Input 
-            type="text" 
-            placeholder="Nhập tên môn học mới (VD: Hệ điều hành, Mạng...)" 
+          <Input
+            type="text"
+            placeholder="Nhập tên môn học mới (VD: Hệ điều hành, Mạng...)"
             className="w-full text-lg border-2 border-dashed h-14 rounded-xl"
             value={subName}
             onChange={(e) => setSubName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleCreate()} 
+            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
           />
         </div>
 

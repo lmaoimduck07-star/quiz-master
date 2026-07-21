@@ -14,12 +14,16 @@ export default function CodingProblemManager({ subject, onBack }) {
   const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
-    // Tải danh sách bài toán hiện tại từ LocalStorage (theo môn học nếu có)
-    if (subject) {
-      setProblems(storage.loadSubjectCodingProblems(subject.id));
-    } else {
-      setProblems(storage.loadCodingProblems());
+    // Tải danh sách bài toán hiện tại từ Firestore / LocalStorage
+    async function loadData() {
+      if (subject) {
+        setProblems(storage.loadSubjectCodingProblems(subject.id));
+      } else {
+        const data = await storage.loadCodingProblems();
+        setProblems(data);
+      }
     }
+    loadData();
   }, [subject]);
 
   const showSuccess = (msg) => {
@@ -27,14 +31,14 @@ export default function CodingProblemManager({ subject, onBack }) {
     setTimeout(() => setSuccessMsg(''), 3000);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Bạn có chắc chắn muốn xóa đề thi lập trình này?')) {
       const updated = problems.filter(p => p.id !== id);
       setProblems(updated);
       if (subject) {
-        storage.saveSubjectCodingProblems(subject.id, updated);
+        await storage.saveSubjectCodingProblems(subject.id, updated);
       } else {
-        storage.saveCodingProblems(updated);
+        await storage.saveCodingProblems(updated);
       }
       showSuccess('Xóa đề thi thành công!');
     }
@@ -91,7 +95,7 @@ export default function CodingProblemManager({ subject, onBack }) {
   const handleTestCaseChange = (index, field, value) => {
     const updatedTestCases = [...editingProblem.testCases];
     updatedTestCases[index][field] = value;
-    
+
     // Tự động phân tích trường `args` từ `input` nếu là JSON hợp lệ
     if (field === 'input') {
       try {
@@ -103,14 +107,14 @@ export default function CodingProblemManager({ subject, onBack }) {
         updatedTestCases[index].args = [value];
       }
     }
-    
+
     setEditingProblem(prev => ({
       ...prev,
       testCases: updatedTestCases
     }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setErrorMsg('');
 
     // Validate
@@ -155,9 +159,9 @@ export default function CodingProblemManager({ subject, onBack }) {
 
     setProblems(updatedProblems);
     if (subject) {
-      storage.saveSubjectCodingProblems(subject.id, updatedProblems);
+      await storage.saveSubjectCodingProblems(subject.id, updatedProblems);
     } else {
-      storage.saveCodingProblems(updatedProblems);
+      await storage.saveCodingProblems(updatedProblems);
     }
     setEditingProblem(null);
     showSuccess(isNew ? 'Thêm mới đề thi thành công!' : 'Cập nhật đề thi thành công!');
@@ -206,31 +210,28 @@ export default function CodingProblemManager({ subject, onBack }) {
         <div className="flex border-b border-slate-200 dark:border-slate-800 gap-1">
           <button
             onClick={() => setActiveFormTab('general')}
-            className={`px-5 py-3 text-xs font-bold transition-all border-b-2 ${
-              activeFormTab === 'general'
+            className={`px-5 py-3 text-xs font-bold transition-all border-b-2 ${activeFormTab === 'general'
                 ? 'border-primary text-primary dark:border-blue-500 dark:text-blue-400'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
+              }`}
           >
             Thông tin chung
           </button>
           <button
             onClick={() => setActiveFormTab('templates')}
-            className={`px-5 py-3 text-xs font-bold transition-all border-b-2 ${
-              activeFormTab === 'templates'
+            className={`px-5 py-3 text-xs font-bold transition-all border-b-2 ${activeFormTab === 'templates'
                 ? 'border-primary text-primary dark:border-blue-500 dark:text-blue-400'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
+              }`}
           >
             Code Templates
           </button>
           <button
             onClick={() => setActiveFormTab('testcases')}
-            className={`px-5 py-3 text-xs font-bold transition-all border-b-2 ${
-              activeFormTab === 'testcases'
+            className={`px-5 py-3 text-xs font-bold transition-all border-b-2 ${activeFormTab === 'testcases'
                 ? 'border-primary text-primary dark:border-blue-500 dark:text-blue-400'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
+              }`}
           >
             Bộ Testcases ({editingProblem.testCases.length})
           </button>
@@ -319,7 +320,7 @@ export default function CodingProblemManager({ subject, onBack }) {
                         />
                         <span className="text-xs text-slate-400 dark:text-slate-500 font-bold self-center">HOẶC</span>
                       </div>
-                      
+
                       <div className="flex items-center justify-center w-full">
                         <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-2xl cursor-pointer bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-900 border-slate-200 dark:border-slate-800">
                           <div className="flex flex-col items-center justify-center pt-5 pb-6">
@@ -327,10 +328,10 @@ export default function CodingProblemManager({ subject, onBack }) {
                             <p className="text-xs text-slate-500 dark:text-slate-400 font-bold">Tải lên file ảnh tự chọn</p>
                             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">PNG, JPG, WEBP (Tự động chuyển Base64)</p>
                           </div>
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            className="hidden" 
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
                             onChange={(e) => {
                               const file = e.target.files[0];
                               if (file) {
@@ -344,7 +345,7 @@ export default function CodingProblemManager({ subject, onBack }) {
                           />
                         </label>
                       </div>
-                      
+
                       {editingProblem.imageUrl && (
                         <Button
                           variant="outline"
@@ -355,14 +356,14 @@ export default function CodingProblemManager({ subject, onBack }) {
                         </Button>
                       )}
                     </div>
-                    
+
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Xem trước ảnh (Preview)</label>
                       {editingProblem.imageUrl ? (
                         <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-950 p-2 max-h-56 flex items-center justify-center">
-                          <img 
-                            src={editingProblem.imageUrl} 
-                            alt="Đề bài Preview" 
+                          <img
+                            src={editingProblem.imageUrl}
+                            alt="Đề bài Preview"
                             className="max-h-48 max-w-full rounded-lg object-contain shadow-sm"
                           />
                         </div>
@@ -534,17 +535,16 @@ export default function CodingProblemManager({ subject, onBack }) {
                       <span className="text-[10px] font-bold text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded">
                         {problem.category}
                       </span>
-                      <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
-                        problem.difficulty === 'Dễ' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'
-                      }`}>
+                      <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${problem.difficulty === 'Dễ' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'
+                        }`}>
                         {problem.difficulty}
                       </span>
                     </div>
                     <div className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold font-mono">
                       ID đề bài: {problem.id} • Hỗ trợ: Java, Python, C++, C, JS
                     </div>
-                    <p 
-                      className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed pt-1" 
+                    <p
+                      className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed pt-1"
                       dangerouslySetInnerHTML={{ __html: problem.description }}
                     />
                   </div>
