@@ -115,30 +115,10 @@ export function useF12Detector({ currentUser, onLocked, enabled = true }) {
       }
     };
 
-    // 2. Detect DevTools mở qua kích thước cửa sổ
-    let devtoolsOpen = false;
-    const THRESHOLD = 160; // px
-
-    const checkDevTools = () => {
-      const widthDiff = window.outerWidth - window.innerWidth;
-      const heightDiff = window.outerHeight - window.innerHeight;
-      const isOpen = widthDiff > THRESHOLD || heightDiff > THRESHOLD;
-
-      if (isOpen && !devtoolsOpen) {
-        devtoolsOpen = true;
-        handleViolation();
-      } else if (!isOpen) {
-        devtoolsOpen = false;
-      }
-    };
-
-    const devtoolsInterval = setInterval(checkDevTools, 1000);
-
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      clearInterval(devtoolsInterval);
     };
   }, [enabled, currentUser, handleViolation]);
 

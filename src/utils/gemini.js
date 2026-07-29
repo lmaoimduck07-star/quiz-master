@@ -25,7 +25,7 @@ const CANDIDATE_MODELS = [
 const callGemini = async (prompt, systemInstruction = '', jsonMode = false) => {
   const apiKey = getApiKey();
   if (!apiKey) {
-    throw new Error('Chưa cấu hình API Key Gemini. Vui lòng thêm vào file .env hoặc nhập ở giao diện.');
+    throw new Error('Chưa cấu hình API Key Gemini. Vui lòng thêm vào file .env hoặc nhập ở giao diện. (Mã lỗi: SYS-02)');
   }
 
   const requestBody = {
@@ -94,66 +94,91 @@ const callGemini = async (prompt, systemInstruction = '', jsonMode = false) => {
     }
   }
 
-  throw lastError || new Error('Không thể kết nối đến Gemini API. Vui lòng kiểm tra API key.');
+  throw lastError || new Error('Không thể kết nối đến Gemini API. Vui lòng kiểm tra API key. (Mã lỗi: SYS-03)');
 };
 
 // 1. Tạo câu hỏi đầu tiên
 export const generateFirstQuestion = async (problem, studentCode, lastOutput, language = 'python') => {
-  const systemInstruction = `Bạn là giám khảo chấm thi vấn đáp lập trình chuyên nghiệp. 
-Nhiệm vụ của bạn là hỏi sinh viên đúng 5 câu hỏi xoay quanh bài làm của họ, mỗi lượt chỉ hỏi 1 câu.
-Hãy đặt câu hỏi đầu tiên ngắn gọn, tập trung thẳng vào logic thuật toán của họ.
-QUAN TRỌNG: Trả lời bằng văn bản thuần túy (plain text). KHÔNG sử dụng markdown (**, *, #, \`), LaTeX ($...$), hay bất kỳ định dạng đặc biệt nào. Viết tự nhiên như đang nói chuyện.`;
+  const problemContent = typeof problem === 'object' 
+    ? `Tiêu đề: ${problem.title || ''}\nMô tả đề bài: ${problem.description || JSON.stringify(problem, null, 2)}`
+    : String(problem);
 
-  const prompt = `Đề bài:
-${JSON.stringify(problem, null, 2)}
+  const systemInstruction = `Bạn là giám khảo chấm thi vấn đáp lập trình chuyên nghiệp và nghiêm túc.
+QUY TẮC BẮT BUỘC VỀ PHẠM VI CÂU HỎI:
+1. Bạn CHỈ ĐƯỢC ĐẶT CÂU HỎI TRONG PHẠM VI NỘI DUNG ĐỀ BÀI VÀ ĐOẠN CODE SINH VIÊN ĐÃ VIẾT.
+2. TUYỆT ĐỐI KHÔNG đặt câu hỏi lý thuyết suông ngoài đề bài, KHÔNG hỏi kiến thức mở rộng ngoài phạm vi yêu cầu của đề bài và code của sinh viên.
+3. Các nội dung được phép hỏi: Ý nghĩa các biến/vòng lặp/hàm trong code sinh viên đã viết, cách code đáp ứng từng yêu cầu cụ thể của đề bài, lý do chọn cách giải này cho bài toán.
+4. Mỗi lượt CHỈ HỎI ĐÚNG 1 CÂU HỎI (Câu 1/5), ngắn gọn, đi thẳng vào vấn đề.
+5. Trả lời bằng văn bản thuần túy (plain text). KHÔNG sử dụng markdown (**, *, #, \`), LaTeX ($...$), hay định dạng đặc biệt. Viết tự nhiên như đang nói chuyện trực tiếp.`;
+
+  const prompt = `Yêu cầu Đề bài:
+${problemContent}
 
 Bài làm của sinh viên (ngôn ngữ: ${language.toUpperCase()}):
 \`\`\`
 ${studentCode}
 \`\`\`
 
-Output khi chạy code (terminal output):
+Output thực tế khi chạy:
 ${lastOutput ? lastOutput : '(Chưa chạy hoặc không có output)'}
 
-Hãy đặt câu hỏi vấn đáp đầu tiên (Câu 1/5) cho sinh viên này bằng tiếng Việt. Câu hỏi ngắn gọn, trực diện, không lan man.`;
+Hãy đặt câu hỏi vấn đáp đầu tiên (Câu 1/5) cho sinh viên này bằng tiếng Việt. BẮT BUỘC câu hỏi phải nằm 100% trong phạm vi Đề bài và Code ở trên.`;
 
   return await callGemini(prompt, systemInstruction);
 };
 
 // 2. Tạo câu hỏi tiếp theo dựa trên lịch sử
 export const generateNextQuestion = async (problem, studentCode, chatHistory, currentQuestionIndex, language = 'java') => {
-  const systemInstruction = `Bạn là giám khảo chấm thi vấn đáp lập trình chuyên nghiệp.
-Nhiệm vụ của bạn là đặt câu hỏi vấn đáp dựa trên lịch sử trao đổi. Bạn đang hỏi câu số ${currentQuestionIndex}/5.
-Không giải thích dài dòng, hãy đi thẳng vào câu hỏi bằng tiếng Việt.
-QUAN TRỌNG: Trả lời bằng văn bản thuần túy (plain text). KHÔNG sử dụng markdown (**, *, #, \`), LaTeX ($...$), hay bất kỳ định dạng đặc biệt nào. Viết tự nhiên như đang nói chuyện.`;
+  const problemContent = typeof problem === 'object' 
+    ? `Tiêu đề: ${problem.title || ''}\nMô tả đề bài: ${problem.description || JSON.stringify(problem, null, 2)}`
+    : String(problem);
+
+  const systemInstruction = `Bạn là giám khảo chấm thi vấn đáp lập trình chuyên nghiệp và nghiêm túc.
+QUY TẮC BẮT BUỘC VỀ PHẠM VI CÂU HỎI:
+1. Bạn CHỈ ĐƯỢC ĐẶT CÂU HỎI TRONG PHẠM VI NỘI DUNG ĐỀ BÀI VÀ ĐOẠN CODE SINH VIÊN ĐÃ VIẾT.
+2. TUYỆT ĐỐI KHÔNG hỏi các kiến thức lý thuyết mở rộng ngoài đề bài, KHÔNG hỏi các chủ đề/công nghệ/bài toán khác nằm ngoài đề bài và code hiện tại.
+3. Đặt câu hỏi xoay quanh: Khai thác câu trả lời trước đó của sinh viên, làm rõ hơn ý nghĩa đoạn code sinh viên viết và cách xử lý các yêu cầu của đề bài.
+4. Mỗi lượt CHỈ HỎI ĐÚNG 1 CÂU HỎI (Câu ${currentQuestionIndex}/5).
+5. Trả lời bằng văn bản thuần túy (plain text). KHÔNG sử dụng markdown (**, *, #, \`), LaTeX ($...$), hay định dạng đặc biệt. Viết tự nhiên như đang nói chuyện trực tiếp.`;
 
   const formattedHistory = chatHistory.map(msg => `${msg.role === 'user' ? 'Sinh viên' : 'Giám khảo'}: ${msg.text}`).join('\n');
 
-  const prompt = `Đề bài:
-${JSON.stringify(problem, null, 2)}
+  const prompt = `Yêu cầu Đề bài:
+${problemContent}
 
 Bài làm của sinh viên (ngôn ngữ: ${language.toUpperCase()}):
 \`\`\`
 ${studentCode}
 \`\`\`
 
-Lịch sử cuộc vấn đáp:
+Lịch sử cuộc vấn đáp đến hiện tại:
 ${formattedHistory}
 
-Hãy đưa ra câu hỏi vấn đáp tiếp theo (Câu ${currentQuestionIndex}/5) bằng tiếng Việt. Câu hỏi ngắn gọn và khai thác câu trả lời trước đó của sinh viên.`;
+Hãy đưa ra câu hỏi vấn đáp tiếp theo (Câu ${currentQuestionIndex}/5) bằng tiếng Việt. BẮT BUỘC câu hỏi phải nằm 100% trong phạm vi Đề bài và Code ở trên, ngắn gọn và trực diện.`;
 
   return await callGemini(prompt, systemInstruction);
 };
 
 // 3. Đánh giá và chấm điểm toàn bộ sau 5 câu hỏi
 export const evaluateViva = async (problem, studentCode, lastOutput, chatHistory, language = 'python') => {
-  const systemInstruction = `Bạn là giám khảo chấm thi vấn đáp lập trình chuyên nghiệp.
-Hãy đánh giá toàn bộ cuộc đối thoại vấn đáp 5 câu của sinh viên, xem họ có thực sự tự viết code, có hiểu thuật toán và tối ưu hóa code tốt không.
+  const problemContent = typeof problem === 'object' 
+    ? `Tiêu đề: ${problem.title || ''}\nMô tả đề bài: ${problem.description || JSON.stringify(problem, null, 2)}`
+    : String(problem);
+
+  const systemInstruction = `Bạn là giám khảo chấm thi vấn đáp lập trình chuyên nghiệp, công bằng và tôn trọng bài làm của sinh viên.
+QUY TẮC BẮT BUỘC KHI ĐÁNH GIÁ & CHẤM ĐIỂM:
+1. Đánh giá ĐÚNG TRỌNG TÂM YÊU CẦU ĐỀ BÀI VÀ NỘI DUNG CODE THỰC TẾ SINH VIÊN ĐÃ VIẾT.
+2. TUYỆT ĐỐI KHÔNG BẮT LỖI HOẶC TRỪ ĐIỂM sinh viên về việc dùng hay không dùng "template code" hoặc "hàm solve()". Sinh viên hoàn toàn tự do viết code dạng script đơn giản hoặc tự tạo hàm riêng, miễn là giải quyết đúng bài toán.
+3. TUYỆT ĐỐI KHÔNG TRỪ ĐIỂM hay nhận xét về việc thiếu "xử lý ngoại lệ" (exception handling, try-catch) hay cấu trúc ngoài trừ khi đề bài có yêu cầu rõ ràng.
+4. Đánh giá dựa trên:
+   - Sinh viên có hiểu và giải thích được đoạn code mình đã viết hay không (xác minh tự viết hay chép).
+   - Code của sinh viên có chạy đúng và đáp ứng đúng các yêu cầu của đề bài hay không.
+
 Trả về dữ liệu dạng JSON khớp chính xác với định dạng sau:
 {
   "vivaScore": 8.5,
   "aiCodeScore": 7.0,
-  "feedback": "Nhận xét chi tiết về kiến thức, khả năng giải trình và tối ưu hóa thuật toán của sinh viên.",
+  "feedback": "Nhận xét chi tiết tập trung vào mức độ hiểu đề bài, giải trình code và thuật toán của sinh viên dựa đúng trên đề bài và bài làm thực tế.",
   "summary": "Tóm tắt ngắn gọn trong 1-2 câu."
 }
 VivaScore: chấm riêng phần trả lời vấn đáp (0-10).
@@ -161,8 +186,8 @@ AiCodeScore: chấm chất lượng code dựa trên các câu trả lời và o
 
   const formattedHistory = chatHistory.map(msg => `${msg.role === 'user' ? 'Sinh viên' : 'Giám khảo'}: ${msg.text}`).join('\n');
 
-  const prompt = `Đề bài:
-${JSON.stringify(problem, null, 2)}
+  const prompt = `Yêu cầu Đề bài:
+${problemContent}
 
 Bài làm của sinh viên (ngôn ngữ: ${language.toUpperCase()}):
 \`\`\`
@@ -199,24 +224,25 @@ Hãy đánh giá và cho điểm. Trả về duy nhất đối tượng JSON ch�
 
 // 4. Tự động trích xuất tiêu chí và thẩm định mã nguồn (Zero-Config AI Review)
 export const autoEvaluateCode = async (problem, studentCode, language = 'java') => {
-  const systemInstruction = `Bạn là chuyên gia thẩm định và chấm điểm mã nguồn lập trình chuyên nghiệp.
-Nhiệm vụ của bạn là:
+  const systemInstruction = `Bạn là chuyên gia thẩm định và chấm điểm mã nguồn lập trình chuyên nghiệp và công bằng.
+QUY TẮC CHẤM ĐIỂM CỐT LÕI (BẮT BUỘC):
 1. Đọc kỹ đề bài (bao gồm tiêu đề và phần mô tả).
-2. Tự động trích xuất từ 3 đến 6 yêu cầu kỹ thuật (Checkpoints) cốt lõi bắt buộc phải có trong code (ví dụ: các lớp cần xây dựng, tính kế thừa, bao đóng, đa hình, các phương thức cụ thể, xử lý logic).
-3. Đánh giá xem mã nguồn của sinh viên (ngôn ngữ: ${language.toUpperCase()}) có đáp ứng từng yêu cầu này không.
-4. Cho điểm tổng quan trên thang điểm 10 và nhận xét chi tiết.
+2. Tự động trích xuất các yêu cầu kỹ thuật (Checkpoints) cốt lõi ĐƯỢC NÊU TRONG ĐỀ BÀI.
+3. TUYỆT ĐỐI KHÔNG BẮT LỖI HOẶC TRỪ ĐIỂM sinh viên về việc dùng hay không dùng "template code", "hàm solve" hay bất kỳ hàm mặc định nào. Sinh viên được tự do viết script trực tiếp hoặc viết hàm riêng.
+4. TUYỆT ĐỐI KHÔNG TRỪ ĐIỂM các kỹ thuật ngoài đề bài (như exception handling, try-catch...) nếu đề bài không yêu cầu.
+5. Đánh giá xem mã nguồn của sinh viên (ngôn ngữ: ${language.toUpperCase()}) có đáp ứng đúng và đủ các yêu cầu trong đề bài hay không.
 
 Bạn PHẢI trả về dữ liệu dạng JSON khớp chính xác với định dạng sau:
 {
   "checkpoints": [
     {
-      "requirement": "Tên yêu cầu trích xuất được (ngắn gọn dưới 15 từ)",
+      "requirement": "Tên yêu cầu trích xuất được từ đề bài (ngắn gọn dưới 15 từ)",
       "passed": true,
       "details": "Giải thích ngắn gọn lý do đạt hoặc không đạt dựa trên phân tích dòng code cụ thể."
     }
   ],
   "score": 8.0,
-  "feedback": "Nhận xét tổng quát chi tiết về chất lượng code, cấu trúc và cách thiết kế của sinh viên."
+  "feedback": "Nhận xét tổng quát tập trung đúng vào các yêu cầu của đề bài và giải pháp trong code sinh viên."
 }`;
 
   const prompt = `Đề bài:

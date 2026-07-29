@@ -43,12 +43,12 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.fullName.trim() || !formData.username.trim()) {
-      alert("Vui lòng nhập đầy đủ Tên hiển thị và Tên đăng nhập (Email)!");
+      alert("Vui lòng nhập đầy đủ Tên hiển thị và Tên đăng nhập (Email)! (Mã lỗi: USER-01)");
       return;
     }
 
     if (formData.roles.length === 0) {
-      alert("Vui lòng chọn ít nhất một vai trò!");
+      alert("Vui lòng chọn ít nhất một vai trò! (Mã lỗi: USER-02)");
       return;
     }
     

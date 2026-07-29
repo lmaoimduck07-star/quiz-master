@@ -94,48 +94,48 @@ export default function QuestionForms({ onAddQuestion }) {
   };
 
   const handleSaveQuestion = () => {
-    if (!qText.trim() && !imageBox) return alert('⚠️ Bạn phải nhập nội dung đề bài hoặc đính kèm ảnh!');
+    if (!qText.trim() && !imageBox) return alert('⚠️ Bạn phải nhập nội dung đề bài hoặc đính kèm ảnh! (Mã lỗi: QST-01)');
     let newQuestion = { type: currentType, question: qText.trim(), image: imageBox, points };
 
     if (currentType === 'single') {
-      if (options.some(o => !o.text.trim() && !o.image)) return alert('⚠️ Vui lòng nhập đầy đủ nội dung hoặc ảnh các đáp án!');
+      if (options.some(o => !o.text.trim() && !o.image)) return alert('⚠️ Vui lòng nhập đầy đủ nội dung hoặc ảnh các đáp án! (Mã lỗi: QST-02)');
       newQuestion.options = options.map(o => o.text);
       newQuestion.optionImages = options.map(o => o.image);
       newQuestion.correct = singleCorrect;
     }
     else if (currentType === 'multiselect') {
-      if (options.some(o => !o.text.trim() && !o.image)) return alert('⚠️ Vui lòng nhập đầy đủ nội dung hoặc ảnh các đáp án!');
-      if (multiCorrects.length === 0) return alert('⚠️ Phải chọn ít nhất 1 đáp án đúng!');
+      if (options.some(o => !o.text.trim() && !o.image)) return alert('⚠️ Vui lòng nhập đầy đủ nội dung hoặc ảnh các đáp án! (Mã lỗi: QST-02)');
+      if (multiCorrects.length === 0) return alert('⚠️ Phải chọn ít nhất 1 đáp án đúng! (Mã lỗi: QST-03)');
       newQuestion.options = options.map(o => o.text);
       newQuestion.optionImages = options.map(o => o.image);
       newQuestion.corrects = [...multiCorrects];
     }
     else if (currentType === 'fill') {
-      if (!fillAnswer.trim()) return alert('⚠️ Vui lòng nhập đáp án!');
+      if (!fillAnswer.trim()) return alert('⚠️ Vui lòng nhập đáp án! (Mã lỗi: QST-04)');
       if (!newQuestion.question.includes('___')) newQuestion.question += ' ___';
       newQuestion.answer = fillAnswer.trim();
       newQuestion.answers = [fillAnswer.trim()];
     }
     else if (currentType === 'truefalse') { newQuestion.correct = tfCorrect; }
     else if (currentType === 'drag') {
-      if (pairs.some(p => !p.left.trim() && !p.right.trim())) return alert('⚠️ Mỗi dòng phải có ít nhất một trong hai vế (trái hoặc phải)!');
-      if (pairs.filter(p => p.right.trim()).length < 2) return alert('⚠️ Cần ít nhất 2 vế phải (đáp án) để học sinh có thể kéo thả!');
-      if (pairs.filter(p => p.left.trim()).length < 1) return alert('⚠️ Cần ít nhất 1 vế trái (câu hỏi) để ghép!');
+      if (pairs.some(p => !p.left.trim() && !p.right.trim())) return alert('⚠️ Mỗi dòng phải có ít nhất một trong hai vế (trái hoặc phải)! (Mã lỗi: QST-05)');
+      if (pairs.filter(p => p.right.trim()).length < 2) return alert('⚠️ Cần ít nhất 2 vế phải (đáp án) để học sinh có thể kéo thả! (Mã lỗi: QST-06)');
+      if (pairs.filter(p => p.left.trim()).length < 1) return alert('⚠️ Cần ít nhất 1 vế trái (câu hỏi) để ghép! (Mã lỗi: QST-07)');
       newQuestion.pairs = [...pairs];
     }
     else if (currentType === 'groupdrag') {
-      if (groups.some(g => !g.name.trim() || !g.itemsStr.trim())) return alert('⚠️ Vui lòng nhập đầy đủ!');
+      if (groups.some(g => !g.name.trim() || !g.itemsStr.trim())) return alert('⚠️ Vui lòng nhập đầy đủ! (Mã lỗi: QST-08)');
       newQuestion.groups = groups.map(g => ({ name: g.name.trim(), items: g.itemsStr.split(',').map(s => s.trim()).filter(s => s !== '') }));
     }
     else if (currentType === 'clozedrag') {
       let blanksCount = (newQuestion.question.match(/___/g) || []).length;
       let validWords = clozeWords.filter(w => w.trim() !== '');
-      if (blanksCount === 0 || blanksCount !== validWords.length) return alert('⚠️ Lỗi số lượng ___');
+      if (blanksCount === 0 || blanksCount !== validWords.length) return alert('⚠️ Lỗi số lượng ___ (Mã lỗi: QST-09)');
       newQuestion.answers = validWords.map(w => w.trim());
     }
     else if (currentType === 'order') {
       let validItems = orderItems.filter(i => i.trim() !== '');
-      if (validItems.length < 2) return alert('⚠️ Cần ít nhất 2 mục để sắp xếp!');
+      if (validItems.length < 2) return alert('⚠️ Cần ít nhất 2 mục để sắp xếp! (Mã lỗi: QST-10)');
       newQuestion.items = validItems;
     }
 
@@ -187,7 +187,7 @@ export default function QuestionForms({ onAddQuestion }) {
             if (options.length > 2) {
               const newOpts = [...options]; newOpts.splice(idx, 1); setOptions(newOpts);
               if (singleCorrect === idx) setSingleCorrect(0);
-            } else alert('Cần tối thiểu 2 đáp án!');
+            } else alert('Cần tối thiểu 2 đáp án! (Mã lỗi: QST-11)');
           }}
           className="h-10 w-10 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50 border-transparent hover:border-red-200 transition"
         ><Trash2 className="h-4 w-4" /></Button>
@@ -295,7 +295,7 @@ export default function QuestionForms({ onAddQuestion }) {
               placeholder="Vế trái cố định — để trống nếu là đáp án nhiễu..." value={p.left} onChange={(e) => { let arr = [...pairs]; arr[i].left = e.target.value; setPairs(arr); }} />
             <input type="text" className="flex-1 p-3 border-2 border-emerald-200 bg-emerald-50 rounded-xl outline-none focus:border-emerald-500 font-bold text-emerald-700 shadow-sm"
               placeholder="Vế phải (Kéo thả) — để trống nếu không cần..." value={p.right} onChange={(e) => { let arr = [...pairs]; arr[i].right = e.target.value; setPairs(arr); }} />
-            <Button variant="outline" onClick={() => { if (pairs.length > 2) { let arr = [...pairs]; arr.splice(i, 1); setPairs(arr); } else alert('Cần tối thiểu 2 cặp!'); }}
+            <Button variant="outline" onClick={() => { if (pairs.length > 2) { let arr = [...pairs]; arr.splice(i, 1); setPairs(arr); } else alert('Cần tối thiểu 2 cặp! (Mã lỗi: QST-12)'); }}
               className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-3 rounded-xl border-transparent hover:border-red-200 h-auto"><Trash2 className="h-5 w-5" /></Button>
           </div>
         ))}
@@ -313,7 +313,7 @@ export default function QuestionForms({ onAddQuestion }) {
             <div className="flex items-center gap-3 mb-3">
               <input type="text" className="flex-1 p-3 border-2 border-slate-200 rounded-lg outline-none focus:border-indigo-400 font-bold text-indigo-700 bg-white"
                 placeholder={`Tên Nhóm ${i + 1}...`} value={g.name} onChange={(e) => { let arr = [...groups]; arr[i].name = e.target.value; setGroups(arr); }} />
-              <Button variant="outline" onClick={() => { if (groups.length > 2) { let arr = [...groups]; arr.splice(i, 1); setGroups(arr); } else alert('Cần tối thiểu 2 nhóm!'); }}
+              <Button variant="outline" onClick={() => { if (groups.length > 2) { let arr = [...groups]; arr.splice(i, 1); setGroups(arr); } else alert('Cần tối thiểu 2 nhóm! (Mã lỗi: QST-13)'); }}
                 className="text-red-500 hover:text-white bg-white hover:bg-red-500 border border-red-200 font-bold gap-2"><Trash2 className="h-4 w-4" /> Xóa nhóm</Button>
             </div>
             <textarea className="w-full p-3 border-2 border-slate-200 rounded-lg outline-none focus:border-indigo-400 font-medium resize-y bg-white text-slate-700" rows="2"

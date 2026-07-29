@@ -1,0 +1,347 @@
+================================================================================
+         TỔNG HỢP MÃ LỖI DỰ ÁN QUIZ MASTER
+         Ngày tạo: 21/07/2026
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NHÓM C — LỖI THỰC THI CODE (Coding / Piston API)
+  File định nghĩa: src/utils/pistonApi.js (dòng 17-24)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  C01  | Code chưa chỉnh sửa hoặc quá ngắn (< 5 ký tự)
+         Thông báo: "Code quá ngắn hoặc rỗng. Hãy viết code trước khi chạy."
+         Nơi xảy ra:
+           - CodingWorkspace.jsx (dòng 195) — khi chạy thử (Run)
+           - CodingWorkspace.jsx (dòng 227) — khi nộp bài (Submit)
+
+  C02  | Lỗi biên dịch (Compile Error)
+         Thông báo: Nội dung lỗi compile trả về từ Piston API (stderr)
+         Nơi xảy ra:
+           - pistonApi.js (dòng 251-254) — khi Piston trả về exit code khác 0
+             ở giai đoạn compile
+
+  C03  | Lỗi runtime (Runtime Error)
+         Thông báo: "[Runtime Error] Mã lỗi: C03" kèm nội dung stderr
+         Nơi xảy ra:
+           - pistonApi.js (dòng 275) — khi exit code != 0 và có stderr
+           - pistonApi.js (dòng 342) — trong log terminal
+
+  C04  | Chương trình chạy quá lâu (Timeout — giới hạn 8 giây)
+         Thông báo: "Chương trình chạy quá lâu (giới hạn 8 giây). Kiểm tra
+                    lại vòng lặp vô hạn."
+         Nơi xảy ra:
+           - pistonApi.js (dòng 260) — khi run.signal === 'SIGKILL'
+           - pistonApi.js (dòng 293) — khi fetch bị AbortError (timeout 10s)
+
+  C05  | Lỗi kết nối đến máy chủ thực thi Piston API
+         Thông báo: "Máy chủ thực thi phản hồi lỗi HTTP {status}. Vui lòng
+                    thử lại sau hoặc báo cáo cho Admin."
+         Nơi xảy ra:
+           - pistonApi.js (dòng 238-241) — khi response.ok === false
+           - CodingWorkspace.jsx (dòng 211, 256) — fallback khi err.code rỗng
+
+  C06  | Code rỗng hoặc không hợp lệ (truyền vào Piston)
+         Thông báo: (nội bộ, không hiển thị trực tiếp cho user)
+         Nơi xảy ra:
+           - pistonApi.js (dòng 187, 196) — khi files truyền vào bị rỗng
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NHÓM A — LỖI KẾT NỐI AI / GEMINI API
+  File định nghĩa: src/pages/coding/CodingViva.jsx (dòng 11-26)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  A01  | Lỗi kết nối mạng đến máy chủ AI
+         Điều kiện: message chứa 'NetworkError', 'Failed to fetch', 'ERR_NETWORK'
+         Thông báo: "Hiện tại server đang có lỗi tương tác với máy chủ, vui
+                    lòng thử lại sau hoặc báo cáo cho Admin."
+         Ghi chú: Đây cũng là mã lỗi mặc định (default) khi không phân loại được
+
+  A02  | Hạn mức API đã vượt giới hạn (Quota Exceeded)
+         Điều kiện: message chứa 'quota', '429', 'RESOURCE_EXHAUSTED'
+         Thông báo: "Hiện tại server đang có lỗi tương tác với máy chủ, vui
+                    lòng thử lại sau hoặc báo cáo cho Admin."
+
+  A03  | API key không hợp lệ hoặc thiếu quyền truy cập
+         Điều kiện: message chứa 'API key', '403', '401', 'UNAUTHENTICATED',
+                    'PERMISSION_DENIED' — hoặc không có API key được cấu hình
+         Thông báo: "Hiện tại server đang có lỗi tương tác với máy chủ, vui
+                    lòng thử lại sau hoặc báo cáo cho Admin. (Mã lỗi: A03)"
+         Nơi xảy ra:
+           - CodingViva.jsx (dòng 79) — khi hasGeminiApiKey() trả về false
+
+  A04  | Máy chủ AI phản hồi quá lâu (Timeout)
+         Điều kiện: message chứa 'timeout', 'AbortError', '504'
+         Thông báo: "Hiện tại server đang có lỗi tương tác với máy chủ, vui
+                    lòng thử lại sau hoặc báo cáo cho Admin."
+
+  A05  | Dữ liệu phản hồi từ AI không đúng định dạng (Parse Error)
+         Điều kiện: message chứa 'JSON', 'parse'
+         Thông báo: "Hiện tại server đang có lỗi tương tác với máy chủ, vui
+                    lòng thử lại sau hoặc báo cáo cho Admin."
+
+  → Lỗi nhóm A xảy ra trong các hàm: generateFirstQuestion(), generateNextQuestion(),
+    evaluateViva() — được gọi trong CodingViva.jsx (dòng 87, 124, 142)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NHÓM S — LỖI PHIÊN LÀM VIỆC (Session)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  S01  | Không thể truy xuất phiên làm việc (Session null/undefined)
+         Thông báo: "Hệ thống không thể truy xuất phiên làm việc. Vui lòng
+                    thử lại sau hoặc báo cáo cho Admin. (Mã lỗi: S01)"
+         Hành vi: Tự động điều hướng về trang /coding/dashboard
+         Nơi xảy ra:
+           - CodingWorkspace.jsx (dòng 72) — khi session === null
+           - CodingViva.jsx (dòng 63) — khi session === null
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NHÓM AUTH — LỖI XÁC THỰC & ĐĂNG NHẬP
+  File: src/context/AuthContext.jsx
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  AUTH-01 | Sai tên đăng nhập hoặc mật khẩu
+            Thông báo: "Sai tên đăng nhập hoặc mật khẩu!"
+            Nơi: AuthContext.jsx (dòng 119) — hàm login()
+
+  AUTH-02 | Tài khoản bị khóa (trạng thái 'Locked')
+            Thông báo: "Tài khoản của bạn đã bị khóa, vui lòng liên hệ với
+                       Admin để được hỗ trợ"
+            Nơi: AuthContext.jsx (dòng 120) — đăng nhập username/password
+                 AuthContext.jsx (dòng 168, 207) — đăng nhập/đăng ký Google
+
+  AUTH-03 | Email Google chưa được đăng ký trong hệ thống
+            Thông báo: "Email {googleEmail} chưa được đăng ký trong hệ thống!
+                       Vui lòng đăng ký tài khoản trước hoặc liên hệ Admin."
+            Nơi: AuthContext.jsx (dòng 164) — hàm loginWithGoogleReal()
+
+  AUTH-04 | Tên miền chưa được thêm vào Firebase Authorized Domains
+            Firebase Code: auth/unauthorized-domain
+            Thông báo: "Tên miền {hostname} chưa được thêm vào Authorized
+                       Domains trong Firebase Console!"
+            Nơi: AuthContext.jsx (dòng 178-179)
+
+  AUTH-05 | Cửa sổ popup Google bị đóng trước khi hoàn tất
+            Firebase Code: auth/popup-closed-by-user
+            Thông báo: "Cửa sổ đăng nhập Google đã bị đóng trước khi hoàn tất."
+            Nơi: AuthContext.jsx (dòng 181-182)
+
+  AUTH-06 | Tính năng đăng nhập Google chưa được kích hoạt
+            Firebase Code: auth/operation-not-allowed
+            Thông báo: "Tính năng đăng nhập Google chưa được kích hoạt trong
+                       Firebase Console."
+            Nơi: AuthContext.jsx (dòng 184-185)
+
+  AUTH-07 | Tài khoản bị khóa bởi Admin (realtime từ Firestore)
+            Thông báo: "🔒 TÀI KHOẢN ĐÃ BỊ KHÓA — Tài khoản của bạn đã bị
+                       khóa bởi Admin. Vui lòng liên hệ Admin để được hỗ trợ."
+            Nơi: AuthContext.jsx (dòng 86-90) — onSnapshot Firestore
+
+  AUTH-08 | Tài khoản bị khóa tự động do mở DevTools/F12 quá số lần
+            Thông báo: "🔒 TÀI KHOẢN ĐÃ BỊ KHÓA — Tài khoản của bạn đã bị
+                       khóa tự động do mở DevTools/F12 quá số lần cho phép."
+            Nơi: AuthContext.jsx (dòng 36-40) — callback handleF12Locked()
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NHÓM EXAM — LỖI QUẢN LÝ ĐỀ THI / CÂU HỎI
+  File: src/components/exams/
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [CodingProblemManager.jsx]
+  EXAM-01 | Đề thi lập trình phải có ít nhất 1 test case
+            Thông báo: "Đề thi phải có ít nhất 1 test case."
+
+  EXAM-02 | Mã đề thi (ID) không được để trống
+            Thông báo: "Mã đề thi (ID) không được để trống."
+
+  EXAM-03 | Mã đề thi (ID) chứa ký tự không hợp lệ
+            Thông báo: "Mã đề thi (ID) chỉ được chứa chữ cái, số, dấu gạch
+                       dưới (_) hoặc gạch ngang (-)."
+
+  EXAM-04 | Tiêu đề đề thi không được để trống
+            Thông báo: "Tiêu đề đề thi không được để trống."
+
+  EXAM-05 | Mô tả đề thi không được để trống
+            Thông báo: "Mô tả đề thi không được để trống."
+
+  EXAM-06 | Test case bị thiếu dữ liệu đầu vào hoặc kết quả kỳ vọng
+            Thông báo: "Test case số {i+1} không được để trống dữ liệu đầu
+                       vào hoặc kết quả kỳ vọng."
+
+  EXAM-07 | Mã đề thi (ID) đã tồn tại
+            Thông báo: "Mã đề thi (ID) đã tồn tại. Vui lòng chọn mã khác."
+
+  [ExamEditor.jsx]
+  EXAM-08 | Không có câu hỏi nào để lưu
+            Thông báo: "⚠️ Không có câu hỏi nào để lưu!"
+
+  EXAM-09 | File import Word không đúng định dạng
+            Thông báo: "❌ File không đúng định dạng nhận diện."
+
+  EXAM-10 | Lỗi đọc file Word
+            Thông báo: "❌ Có lỗi xảy ra khi đọc file Word!"
+
+  [ExamManager.jsx]
+  EXAM-11 | Giải mã Base64 thất bại khi import dữ liệu
+            Thông báo: "Giải mã Base64 thất bại"
+
+  [RandomExamModal.jsx]
+  EXAM-12 | Chưa chọn đề thi nguồn để tạo đề ngẫu nhiên
+            Thông báo: "⚠️ Vui lòng chọn ít nhất một đề thi để lấy nguồn câu hỏi!"
+
+  EXAM-13 | Số lượng câu hỏi phải lớn hơn 0
+            Thông báo: "⚠️ Số lượng câu hỏi phải lớn hơn 0!"
+
+  EXAM-14 | Số lượng câu hỏi vượt quá tổng số câu có sẵn
+            Thông báo: "⚠️ Số lượng câu hỏi yêu cầu ({n}) vượt quá tổng số
+                       câu hỏi hiện có ({total})!"
+
+  EXAM-15 | Chưa nhập tiêu đề đề thi mới
+            Thông báo: "⚠️ Vui lòng nhập tiêu đề cho đề thi mới!"
+
+  EXAM-16 | Không tìm thấy câu hỏi nào trong đề thi được chọn
+            Thông báo: "⚠️ Không tìm thấy câu hỏi nào trong các đề thi được chọn!"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NHÓM QST — LỖI NHẬP LIỆU CÂU HỎI
+  File: src/components/exams/QuestionForms.jsx, QuestionModal.jsx
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  QST-01 | Câu hỏi thiếu nội dung đề bài và ảnh đính kèm
+           Thông báo: "⚠️ Bạn phải nhập nội dung đề bài hoặc đính kèm ảnh!"
+
+  QST-02 | Đáp án bị bỏ trống (trắc nghiệm đơn/đa)
+           Thông báo: "⚠️ Vui lòng nhập đầy đủ nội dung hoặc ảnh các đáp án!"
+
+  QST-03 | Chưa chọn đáp án đúng (trắc nghiệm đa)
+           Thông báo: "⚠️ Phải chọn ít nhất 1 đáp án đúng!"
+
+  QST-04 | Câu điền vào chỗ trống thiếu đáp án
+           Thông báo: "⚠️ Vui lòng nhập đáp án!"
+
+  QST-05 | Câu ghép đôi: dòng thiếu cả hai vế
+           Thông báo: "⚠️ Mỗi dòng phải có ít nhất một trong hai vế (trái hoặc phải)!"
+
+  QST-06 | Câu ghép đôi: không đủ 2 vế phải (đáp án để kéo thả)
+           Thông báo: "⚠️ Cần ít nhất 2 vế phải (đáp án) để học sinh có thể kéo thả!"
+
+  QST-07 | Câu ghép đôi: không có vế trái (câu hỏi)
+           Thông báo: "⚠️ Cần ít nhất 1 vế trái (câu hỏi) để ghép!"
+
+  QST-08 | Câu nhóm: nhóm bị thiếu tên hoặc nội dung
+           Thông báo: "⚠️ Vui lòng nhập đầy đủ!"
+
+  QST-09 | Câu điền từ: số lượng ___ không khớp với số đáp án
+           Thông báo: "⚠️ Lỗi số lượng ___"
+
+  QST-10 | Câu sắp xếp: cần ít nhất 2 mục
+           Thông báo: "⚠️ Cần ít nhất 2 mục để sắp xếp!"
+
+  QST-11 | Câu trắc nghiệm: cần ít nhất 2 đáp án
+           Thông báo: "Cần ít nhất 2 đáp án!" / "Cần tối thiểu 2 đáp án!"
+
+  QST-12 | Cần tối thiểu 2 cặp ghép đôi
+           Thông báo: "Cần tối thiểu 2 cặp!"
+
+  QST-13 | Cần tối thiểu 2 nhóm phân loại
+           Thông báo: "Cần tối thiểu 2 nhóm!"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NHÓM USER — LỖI QUẢN LÝ NGƯỜI DÙNG
+  File: src/components/users/UserModal.jsx
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  USER-01 | Thiếu Tên hiển thị hoặc Tên đăng nhập (Email)
+            Thông báo: "Vui lòng nhập đầy đủ Tên hiển thị và Tên đăng nhập (Email)!"
+
+  USER-02 | Chưa chọn vai trò cho người dùng
+            Thông báo: "Vui lòng chọn ít nhất một vai trò!"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NHÓM SUBJ — LỖI QUẢN LÝ MÔN HỌC
+  File: src/components/exams/SubjectManager.jsx, SubjectCard.jsx
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  SUBJ-01 | Chưa nhập tên môn học
+            Thông báo: "Vui lòng nhập tên môn học!"
+
+  SUBJ-02 | Mã xác nhận xóa môn học không chính xác
+            Thông báo: "Mã xác nhận chưa chính xác!"
+            Nơi: SubjectCard.jsx (dòng 44)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NHÓM EXAM-SIM — LỖI THI MÔ PHỎNG (MockExam)
+  File: src/pages/MockExam.jsx
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  SIM-01 | Hết giờ làm bài — tự động nộp bài
+           Thông báo: "Hết giờ làm bài! Hệ thống tự động nộp bài."
+           Nơi: MockExam.jsx (dòng 159)
+
+  SIM-02 | Vi phạm rời phòng thi 3 lần — tự động nộp bài
+           Thông báo: "Bạn đã vi phạm rời phòng thi 3 lần ({reason}).
+                      Hệ thống tự động nộp bài thi!"
+           Nơi: MockExam.jsx (dòng 203)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NHÓM DASH — LỖI TRÊN DASHBOARD
+  File: src/pages/ClientDashboard.jsx, AdminDashboard.jsx
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  DASH-01 | Môn học chưa có câu hỏi để tạo đề thi mô phỏng
+            Thông báo: "Môn học này chưa có câu hỏi nào để tạo đề thi mô phỏng!"
+            Nơi: ClientDashboard.jsx (dòng 116)
+
+  DASH-02 | Mã xác nhận không chính xác (client)
+            Thông báo: "Mã xác nhận chưa chính xác!"
+            Nơi: ClientDashboard.jsx (dòng 128)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NHÓM SYS — LỖI HỆ THỐNG / NỘI BỘ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  SYS-01 | useAuth() được gọi ngoài AuthProvider
+           Thông báo: "useAuth must be used within an AuthProvider"
+           Nơi: AuthContext.jsx (dòng 256) — lỗi lập trình nội bộ
+
+  SYS-02 | API Key Gemini chưa được cấu hình
+           Thông báo: "Chưa cấu hình API Key Gemini. Vui lòng thêm vào file
+                      .env hoặc nhập ở giao diện."
+           Nơi: gemini.js (dòng 28) — hàm callGemini()
+
+  SYS-03 | Gemini API: không thể kết nối đến bất kỳ model nào
+           Thông báo: "Không thể kết nối đến Gemini API. Vui lòng kiểm tra API key."
+           Nơi: gemini.js (dòng 97) — sau khi thử hết tất cả CANDIDATE_MODELS
+
+  SYS-04 | Không thể parse JSON phản hồi từ Gemini
+           Thông báo: (console.error) "Failed to parse Gemini evaluation JSON"
+                      "Failed to extract JSON from response"
+           Nơi: gemini.js (dòng 183-190, 237-244)
+
+  SYS-05 | File phụ trợ đã tồn tại trong workspace
+           Thông báo: "File này đã tồn tại!"
+           Nơi: CodingWorkspace.jsx (dòng 167)
+
+================================================================================
+  TỔNG KẾT
+================================================================================
+
+  Tổng số mã lỗi đã ghi nhận: 50+ mã
+  ┌────────────────────────────────────────────┬────────┐
+  │ Nhóm                                       │ Số mã  │
+  ├────────────────────────────────────────────┼────────┤
+  │ C  — Lỗi thực thi code (Piston API)        │   6    │
+  │ A  — Lỗi kết nối AI / Gemini API           │   5    │
+  │ S  — Lỗi phiên làm việc (Session)          │   1    │
+  │ AUTH — Lỗi xác thực & đăng nhập            │   8    │
+  │ EXAM — Lỗi quản lý đề thi                  │  16    │
+  │ QST — Lỗi nhập liệu câu hỏi               │  13    │
+  │ USER — Lỗi quản lý người dùng              │   2    │
+  │ SUBJ — Lỗi quản lý môn học                 │   2    │
+  │ SIM — Lỗi thi mô phỏng                     │   2    │
+  │ DASH — Lỗi Dashboard                       │   2    │
+  │ SYS — Lỗi hệ thống / nội bộ               │   5    │
+  ├────────────────────────────────────────────┼────────┤
+  │ TỔNG CỘNG                                  │  62    │
+  └────────────────────────────────────────────┴────────┘
+
+================================================================================

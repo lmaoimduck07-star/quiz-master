@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { storage } from '../utils/storage';
+import { generateNextUserId } from '../utils/idGenerator';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
@@ -64,7 +65,7 @@ export default function Register() {
       if (isDuplicateEmail) { setError('Email đã được đăng ký cho tài khoản khác!'); return; }
 
       const newUser = {
-        id: 'U_' + Date.now(),
+        id: generateNextUserId(users, 'default'),
         fullName: fullName.trim(),
         username: username.trim(),
         email: email.trim(),

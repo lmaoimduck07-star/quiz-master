@@ -9,7 +9,7 @@ export default function SubjectManager({ subjects, onAddSubject, onDeleteSubject
 
   const handleCreate = () => {
     if (!subName.trim()) {
-      alert("Vui lòng nhập tên môn học!");
+      alert("Vui lòng nhập tên môn học! (Mã lỗi: SUBJ-01)");
       return;
     }
 

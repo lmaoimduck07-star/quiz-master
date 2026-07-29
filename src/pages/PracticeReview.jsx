@@ -177,9 +177,10 @@ export default function PracticeReview() {
                         }
 
                         if (qType === 'drag') {
+                          const validPairs = (q.pairs || []).filter(p => p.left && p.left.toString().trim() !== '');
                           return (
                             <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl space-y-3">
-                              {(q.pairs || []).map((p, pIdx) => {
+                              {validPairs.map((p, pIdx) => {
                                 const userRight = (q.userAnswer || {})[p.left] || '';
                                 const isPairCorrect = userRight === p.right;
                                 return (

@@ -1,12 +1,19 @@
 import { useState } from 'react';
 import ExamCard from './ExamCard';
 import RandomExamModal from './RandomExamModal';
-import { ArrowLeft, Check, Dices, Download, Folder, Plus } from 'lucide-react';
+import { ArrowLeft, Check, Dices, Download, Folder, Plus, Pencil } from 'lucide-react';
 import { Button } from '../ui/Button';
 
 export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEditor, onPlayExam }) {
   const [isRandomModalOpen, setIsRandomModalOpen] = useState(false);
   
+  const handleRenameSubject = () => {
+    const newName = prompt("Nhập tên mới cho môn học này:", subject.name);
+    if (newName !== null && newName.trim() !== "" && newName.trim() !== subject.name) {
+      onUpdateSubject({ ...subject, name: newName.trim() });
+    }
+  };
+
   // Hàm xử lý việc xóa đề thi
   const handleDeleteExam = (examId) => {
     if (confirm("Bạn có chắc chắn muốn xóa đề thi này không?")) {
@@ -41,23 +48,6 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
     const importedExams = [];
     const errors = [];
 
-    // Helper functions giải mã đồng bộ với template
-    const b64_to_utf8 = (str) => {
-      try {
-        return decodeURIComponent(escape(window.atob(str)));
-      } catch (err) {
-        throw new Error("Giải mã Base64 thất bại");
-      }
-    };
-    
-    const xorDecrypt = (text, key) => {
-      let res = '';
-      for (let i = 0; i < text.length; i++) {
-        res += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-      }
-      return res;
-    };
-
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const result = await new Promise((resolve) => {
@@ -77,48 +67,46 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
           let payload = null;
 
           try {
-            const decryptedText = b64_to_utf8(rawData);
-            payload = JSON.parse(decryptedText);
+            const b64_to_utf8 = (str) => decodeURIComponent(escape(window.atob(str)));
+            payload = JSON.parse(b64_to_utf8(rawData));
           } catch (err) {
-            const password = prompt(`🔒 Đề thi "${file.name}" được khóa bằng mật khẩu. Vui lòng nhập mật khẩu:`);
-            if (password === null) {
-              resolve({ success: false, fileName: file.name, error: "Người dùng hủy nhập" });
-              return;
-            }
-            
-            try {
-              const base64Decoded = b64_to_utf8(rawData);
-              const decryptedText = xorDecrypt(base64Decoded, password);
-              payload = JSON.parse(decryptedText);
-            } catch (err2) {
-              resolve({ success: false, fileName: file.name, error: "Sai mật khẩu hoặc dữ liệu bị hỏng" });
-              return;
-            }
+            resolve({ success: false, fileName: file.name, error: "Dữ liệu bị hỏng hoặc sai định dạng" });
+            return;
           }
 
           if (payload && payload.config && payload.data) {
             const normalizedQuestions = payload.data.map(q => {
-              if (q.type === 'fill') {
-                const hasAnswers = Array.isArray(q.answers) && q.answers.length > 0;
-                const hasAnswer = q.answer !== undefined && q.answer !== null && q.answer !== '';
-                
-                if (hasAnswers && !hasAnswer) {
-                  return { ...q, answer: q.answers[0] };
-                } else if (hasAnswer && !hasAnswers) {
-                  return { ...q, answers: [q.answer] };
-                }
-              }
-              return q;
+              return {
+                id: q.id || Date.now() + Math.random(),
+                type: q.type || 'single',
+                question: q.question || '',
+                options: q.options || [],
+                answer: q.answer !== undefined ? q.answer : 0,
+                explanation: q.explanation || '',
+                pairs: q.pairs || [],
+                groups: q.groups || [],
+                answers: q.answers || [],
+                corrects: q.corrects || [],
+                correct: q.correct !== undefined ? q.correct : true,
+                items: q.items || []
+              };
             });
 
-            const newExam = {
-              id: 'ex_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2, 5),
-              config: payload.config,
+            importedExams.push({
+              id: 'exam_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+              config: {
+                title: payload.config.title || file.name.replace('.html', ''),
+                subject: payload.config.subject || subject.name,
+                time: payload.config.time || 15,
+                passScore: payload.config.passScore || 50,
+                shuffle: payload.config.shuffle || false,
+                mode: payload.config.mode || 'practice'
+              },
               questions: normalizedQuestions
-            };
-            resolve({ success: true, fileName: file.name, exam: newExam });
+            });
+            resolve({ success: true, fileName: file.name });
           } else {
-            resolve({ success: false, fileName: file.name, error: "Cấu trúc dữ liệu đề thi không hợp lệ" });
+            resolve({ success: false, fileName: file.name, error: "Cấu trúc file HTML không đúng chuẩn QuizMaster" });
           }
         };
         reader.onerror = () => {
@@ -128,25 +116,19 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
       });
 
       if (result.success) {
-        importedExams.push(result.exam);
+        // Nạp thêm đề vừa import vào mảng tạm
       } else {
         errors.push(`${result.fileName}: ${result.error}`);
       }
     }
 
     if (importedExams.length > 0) {
-      const newExams = [...importedExams, ...(subject.exams || [])];
+      const newExams = [...(subject.exams || []), ...importedExams];
       onUpdateSubject({ ...subject, exams: newExams });
     }
 
-    const successMsg = importedExams.length > 0 
-      ? `📥 Đã nhập thành công ${importedExams.length}/${files.length} đề thi!` 
-      : `❌ Nhập đề thi thất bại!`;
-      
-    const errorMsg = errors.length > 0 
-      ? `\n\nChi tiết lỗi:\n${errors.join('\n')}` 
-      : '';
-
+    let successMsg = importedExams.length > 0 ? `✅ Đã nhập thành công ${importedExams.length} đề thi!\n` : '';
+    let errorMsg = errors.length > 0 ? `❌ Có ${errors.length} file bị lỗi:\n` + errors.join('\n') : '';
     alert(successMsg + errorMsg);
 
     // Reset file input
@@ -154,29 +136,36 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-8">
+    <div className="max-w-5xl mx-auto p-6 md:p-8">
       
       {/* --- NÚT QUAY LẠI --- */}
       <Button 
         variant="outline"
         onClick={onBack}
-        className="font-bold py-2.5 px-6 rounded-xl mb-8 flex items-center gap-2 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-850 transition-colors"
+        className="font-bold py-2 px-4 rounded-xl mb-6 flex items-center gap-2 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-850 text-xs transition-colors"
       >
-        <ArrowLeft className="h-5 w-5" /> Quay lại Trang chủ
+        <ArrowLeft className="h-4 w-4" /> Quay lại Trang chủ
       </Button>
 
       {/* --- BANNER THÔNG TIN MÔN HỌC --- */}
-      <div className={`border p-8 rounded-3xl shadow-sm flex justify-between items-center mb-10 transition-colors ${subject.isCompleted ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'}`}>
-        <div className="flex items-center gap-6">
-          <div className="bg-amber-100 dark:bg-amber-950/30 p-5 rounded-2xl shadow-inner text-amber-600 dark:text-amber-400">
-            <Folder className="h-12 w-12" />
+      <div className={`border p-5 md:p-6 rounded-2xl shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 transition-colors ${subject.isCompleted ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'}`}>
+        <div className="flex items-center gap-4">
+          <div className="bg-amber-100 dark:bg-amber-950/30 p-3 rounded-xl shadow-inner text-amber-600 dark:text-amber-400 shrink-0">
+            <Folder className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-4xl font-black text-slate-800 dark:text-slate-100 m-0 leading-tight mb-2 flex items-center">
-              {subject.name}
-              {subject.isCompleted && <span className="ml-4 text-xl bg-emerald-500 text-white px-3 py-1 rounded-lg shadow-sm font-semibold border-transparent">Đã chốt sổ</span>}
+            <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100 m-0 leading-tight flex items-center gap-2.5 flex-wrap">
+              <span>{subject.name}</span>
+              <button
+                type="button"
+                onClick={handleRenameSubject}
+                className="text-slate-400 hover:text-amber-500 bg-slate-100 dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg p-1.5 transition cursor-pointer"
+                title="Sửa tên môn học"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+              {subject.isCompleted && <span className="text-xs bg-emerald-500 text-white px-2.5 py-0.5 rounded-md font-semibold border-transparent">Đã chốt sổ</span>}
             </h1>
-
           </div>
         </div>
         
@@ -184,29 +173,29 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
           <Button 
             variant="success"
             onClick={handleCompleteSubject}
-            className="h-14 px-8 rounded-2xl font-bold shadow-lg gap-2 text-lg border-transparent"
+            className="h-10 px-5 rounded-xl font-bold shadow-md gap-1.5 text-xs border-transparent shrink-0"
           >
-            <Check className="h-6 w-6" /> Đánh Dấu Hoàn Thành
+            <Check className="h-4 w-4" /> Đánh Dấu Hoàn Thành
           </Button>
         )}
       </div>
 
       {/* --- DANH SÁCH ĐỀ THI --- */}
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="text-2xl font-black text-slate-800 dark:text-white m-0 border-l-4 border-primary pl-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <h3 className="text-xl font-black text-slate-800 dark:text-white m-0 border-l-4 border-primary pl-3">
           Danh Sách Đề Thi
         </h3>
         
         {!subject.isCompleted && (
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2.5">
             <button
               onClick={() => setIsRandomModalOpen(true)}
-              className="bg-amber-500 hover:bg-amber-600 text-white font-bold py-3.5 px-6 rounded-xl transition shadow-md hover:shadow-lg flex items-center gap-2 border-transparent"
+              className="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 px-4 rounded-xl transition shadow-sm hover:shadow text-xs flex items-center gap-1.5 border-transparent cursor-pointer"
             >
-              <Dices className="h-5 w-5" /> TRỘN ĐỀ NGẪU NHIÊN
+              <Dices className="h-4 w-4" /> TRỘN ĐỀ NGẪU NHIÊN
             </button>
-            <label className="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3.5 px-6 rounded-xl transition shadow-md hover:shadow-lg cursor-pointer flex items-center gap-2 border-transparent">
-              <Download className="h-5 w-5" /> NHẬP HÀNG LOẠT (HTML)
+            <label className="bg-slate-600 hover:bg-slate-700 text-white font-bold py-2.5 px-4 rounded-xl transition shadow-sm hover:shadow text-xs cursor-pointer flex items-center gap-1.5 border-transparent">
+              <Download className="h-4 w-4" /> NHẬP HÀNG LOẠT (HTML)
               <input 
                 type="file" 
                 accept=".html" 
@@ -216,10 +205,10 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
               />
             </label>
             <Button 
-              onClick={() => onOpenEditor(null)} // Truyền null để báo là Tạo đề mới
-              className="h-14 px-8 rounded-xl font-bold shadow-md gap-2 border-transparent"
+              onClick={() => onOpenEditor(null)}
+              className="h-9 px-4 rounded-xl font-bold shadow-sm text-xs gap-1.5 border-transparent"
             >
-              <Plus className="h-5 w-5" /> SOẠN ĐỀ THI MỚI
+              <Plus className="h-4 w-4" /> SOẠN ĐỀ THI MỚI
             </Button>
           </div>
         )}

@@ -29,6 +29,42 @@ export default function AuditLogManager({ logs }) {
     }
   };
 
+  const exportLogsCSV = () => {
+    if (filteredLogs.length === 0) {
+      alert("Không có bản ghi log nào để xuất!");
+      return;
+    }
+    const headers = ["ID", "Thời gian", "Người dùng", "Vai trò", "Phân loại", "Mức độ", "Hành động"];
+    const rows = filteredLogs.map(l => [
+      l.id,
+      l.timestamp || '',
+      l.user || '',
+      l.role || '',
+      l.category || '',
+      l.severity || '',
+      `"${(l.action || '').replace(/"/g, '""')}"`
+    ]);
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `audit_logs_${Date.now()}.csv`;
+    link.click();
+  };
+
+  const exportLogsJSON = () => {
+    if (filteredLogs.length === 0) {
+      alert("Không có bản ghi log nào để xuất!");
+      return;
+    }
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(filteredLogs, null, 2));
+    const link = document.createElement("a");
+    link.href = dataStr;
+    link.download = `audit_logs_${Date.now()}.json`;
+    link.click();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col items-center mb-10 relative">
@@ -40,8 +76,8 @@ export default function AuditLogManager({ logs }) {
       </div>
 
       <Card className="border-0 shadow-sm rounded-3xl overflow-hidden">
-        <CardHeader className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 p-6 flex flex-col sm:flex-row justify-between gap-4 transition-colors">
-          <div className="flex gap-4 flex-1">
+        <CardHeader className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 p-6 flex flex-col sm:flex-row justify-between items-center gap-4 transition-colors">
+          <div className="flex gap-4 flex-1 w-full sm:w-auto">
             <div className="relative w-full max-w-md">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
               <Input 
@@ -54,7 +90,7 @@ export default function AuditLogManager({ logs }) {
             
             <div className="relative">
               <select 
-                className="appearance-none h-12 pl-4 pr-10 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl outline-none bg-slate-50 dark:bg-slate-950 font-medium cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors min-w-[180px]"
+                className="appearance-none h-12 pl-4 pr-10 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl outline-none bg-slate-50 dark:bg-slate-950 font-medium cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors min-w-[160px]"
                 value={severityFilter}
                 onChange={(e) => setSeverityFilter(e.target.value)}
               >
@@ -65,6 +101,15 @@ export default function AuditLogManager({ logs }) {
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500 pointer-events-none" />
             </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <Button onClick={exportLogsCSV} variant="outline" className="h-12 px-4 rounded-xl gap-2 font-bold text-slate-700 dark:text-slate-300">
+              <FileText className="h-4 w-4 text-emerald-500" /> Xuất CSV
+            </Button>
+            <Button onClick={exportLogsJSON} variant="outline" className="h-12 px-4 rounded-xl gap-2 font-bold text-slate-700 dark:text-slate-300">
+              <FileText className="h-4 w-4 text-blue-500" /> Xuất JSON
+            </Button>
           </div>
         </CardHeader>
         

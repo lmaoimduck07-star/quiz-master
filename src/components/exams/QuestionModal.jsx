@@ -127,7 +127,7 @@ export default function QuestionModal({ isOpen, questionData, onSave, onClose })
     optionImages: [...(formData.optionImages || formData.options.map(() => '')), '']
   });
   const removeOption = (index) => {
-    if (formData.options.length <= 2) return alert("Cần ít nhất 2 đáp án!");
+    if (formData.options.length <= 2) return alert("Cần ít nhất 2 đáp án! (Mã lỗi: QST-11)");
     let newOptions = [...formData.options]; newOptions.splice(index, 1);
     let newImages = [...(formData.optionImages || formData.options.map(() => ''))]; newImages.splice(index, 1);
     if (formData.type === 'single' && formData.correct === index) {
@@ -284,7 +284,7 @@ export default function QuestionModal({ isOpen, questionData, onSave, onClose })
               </div>
               <Button variant="outline" onClick={() => {
                 if (formData.items.length > 2) { let arr = [...formData.items]; arr.splice(i, 1); setFormData({ ...formData, items: arr }); }
-                else alert("Cần tối thiểu 2 mục");
+                else alert("Cần tối thiểu 2 mục (Mã lỗi: QST-10)");
               }} className="text-slate-400 hover:text-red-500 hover:bg-red-50 border-transparent hover:border-red-200 p-2 h-auto"><Trash2 className="h-5 w-5" /></Button>
             </div>
           );
@@ -310,7 +310,7 @@ export default function QuestionModal({ isOpen, questionData, onSave, onClose })
               onChange={(e) => { let arr = formData.pairs.map(x => ({ ...x })); arr[i].right = e.target.value; setFormData({ ...formData, pairs: arr }); }} />
             <Button variant="outline" onClick={() => {
               if (formData.pairs.length > 2) { let arr = [...formData.pairs]; arr.splice(i, 1); setFormData({ ...formData, pairs: arr }); }
-              else alert('Cần tối thiểu 2 cặp!');
+              else alert('Cần tối thiểu 2 cặp! (Mã lỗi: QST-12)');
             }} className="text-slate-400 hover:text-red-500 hover:bg-red-50 border-transparent hover:border-red-200 p-3 h-auto rounded-xl"><Trash2 className="h-5 w-5" /></Button>
           </div>
         ))}
@@ -368,9 +368,9 @@ export default function QuestionModal({ isOpen, questionData, onSave, onClose })
           <Button variant="outline" onClick={onClose} className="px-6 font-bold text-slate-600 border-slate-300 hover:bg-slate-100">Hủy Bỏ</Button>
           <Button onClick={() => {
             if (formData.type === 'drag') {
-              if (formData.pairs.some(p => !p.left.trim() && !p.right.trim())) return alert('⚠️ Mỗi dòng phải có ít nhất một trong hai vế (trái hoặc phải)!');
-              if (formData.pairs.filter(p => p.right.trim()).length < 2) return alert('⚠️ Cần ít nhất 2 vế phải (đáp án) để học sinh có thể kéo thả!');
-              if (formData.pairs.filter(p => p.left.trim()).length < 1) return alert('⚠️ Cần ít nhất 1 vế trái (câu hỏi) để ghép!');
+              if (formData.pairs.some(p => !p.left.trim() && !p.right.trim())) return alert('⚠️ Mỗi dòng phải có ít nhất một trong hai vế (trái hoặc phải)! (Mã lỗi: QST-05)');
+              if (formData.pairs.filter(p => p.right.trim()).length < 2) return alert('⚠️ Cần ít nhất 2 vế phải (đáp án) để học sinh có thể kéo thả! (Mã lỗi: QST-06)');
+              if (formData.pairs.filter(p => p.left.trim()).length < 1) return alert('⚠️ Cần ít nhất 1 vế trái (câu hỏi) để ghép! (Mã lỗi: QST-07)');
             }
             onSave(formData);
           }} className="px-8 font-black shadow-md gap-2"><Save className="h-5 w-5" /> Lưu Lại Thay Đổi</Button>

@@ -80,22 +80,22 @@ export default function RandomExamModal({ isOpen, onClose, subject, onUpdateSubj
 
   const handleCreate = () => {
     if (selectedExamIds.length === 0) {
-      alert("⚠️ Vui lòng chọn ít nhất một đề thi để lấy nguồn câu hỏi!");
+      alert("⚠️ Vui lòng chọn ít nhất một đề thi để lấy nguồn câu hỏi! (Mã lỗi: EXAM-12)");
       return;
     }
 
     if (questionCount <= 0) {
-      alert("⚠️ Số lượng câu hỏi phải lớn hơn 0!");
+      alert("⚠️ Số lượng câu hỏi phải lớn hơn 0! (Mã lỗi: EXAM-13)");
       return;
     }
 
     if (questionCount > totalAvailableQuestions) {
-      alert(`⚠️ Số lượng câu hỏi yêu cầu (${questionCount}) vượt quá tổng số câu hỏi hiện có (${totalAvailableQuestions})!`);
+      alert(`⚠️ Số lượng câu hỏi yêu cầu (${questionCount}) vượt quá tổng số câu hỏi hiện có (${totalAvailableQuestions})! (Mã lỗi: EXAM-14)`);
       return;
     }
 
     if (!examTitle.trim()) {
-      alert("⚠️ Vui lòng nhập tiêu đề cho đề thi mới!");
+      alert("⚠️ Vui lòng nhập tiêu đề cho đề thi mới! (Mã lỗi: EXAM-15)");
       return;
     }
 
@@ -109,7 +109,7 @@ export default function RandomExamModal({ isOpen, onClose, subject, onUpdateSubj
     });
 
     if (allQuestions.length === 0) {
-      alert("⚠️ Không tìm thấy câu hỏi nào trong các đề thi được chọn!");
+      alert("⚠️ Không tìm thấy câu hỏi nào trong các đề thi được chọn! (Mã lỗi: EXAM-16)");
       return;
     }
 

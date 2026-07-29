@@ -30,7 +30,7 @@ export default function ExamEditor({ subject, examId, onBack, onSaveExam }) {
   // 3. HÀM LƯU ĐỀ THI (Gửi ra ngoài App.jsx)
   const handleSave = () => {
     if (questions.length === 0) {
-      alert("⚠️ Không có câu hỏi nào để lưu!");
+      alert("⚠️ Không có câu hỏi nào để lưu! (Mã lỗi: EXAM-08)");
       return;
     }
     onSaveExam(examId, config, questions);
@@ -58,10 +58,10 @@ export default function ExamEditor({ subject, examId, onBack, onSaveExam }) {
         setQuestions(prev => [...prev, ...importedQuestions]);
         alert(`✅ Đã nhập thành công ${importedQuestions.length} câu hỏi vào đề!`);
       } else {
-        alert("❌ File không đúng định dạng nhận diện.");
+        alert("❌ File không đúng định dạng nhận diện. (Mã lỗi: EXAM-09)");
       }
     } catch (err) {
-      alert("❌ Có lỗi xảy ra khi đọc file Word!");
+      alert("❌ Có lỗi xảy ra khi đọc file Word! (Mã lỗi: EXAM-10)");
       console.error(err);
     } finally {
       // Reset input để có thể chọn lại cùng 1 file nếu cần

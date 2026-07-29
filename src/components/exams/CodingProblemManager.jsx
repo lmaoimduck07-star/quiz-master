@@ -1,17 +1,24 @@
-// src/components/exams/CodingProblemManager.jsx
 import React, { useState, useEffect } from 'react';
 import { Button } from '../ui/Button';
 import { Card, CardContent } from '../ui/Card';
-import { Code2, Plus, Edit2, Trash2, Save, ArrowLeft, PlusCircle, MinusCircle, AlertCircle, FileText, CheckCircle2 } from 'lucide-react';
+import { Code2, Plus, Edit2, Trash2, Save, ArrowLeft, PlusCircle, MinusCircle, AlertCircle, FileText, CheckCircle2, Pencil } from 'lucide-react';
 import { storage } from '../../utils/storage';
 
-export default function CodingProblemManager({ subject, onBack }) {
+export default function CodingProblemManager({ subject, onBack, onUpdateSubject }) {
   const [problems, setProblems] = useState([]);
   const [editingProblem, setEditingProblem] = useState(null); // null hoặc đối tượng problem đang sửa/thêm mới
   const [isNew, setIsNew] = useState(false);
   const [activeFormTab, setActiveFormTab] = useState('general'); // 'general' | 'templates' | 'testcases'
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  const handleRenameSubject = () => {
+    if (!onUpdateSubject || !subject) return;
+    const newName = prompt("Nhập tên mới cho môn học này:", subject.name);
+    if (newName !== null && newName.trim() !== "" && newName.trim() !== subject.name) {
+      onUpdateSubject({ ...subject, name: newName.trim() });
+    }
+  };
 
   useEffect(() => {
     // Tải danh sách bài toán hiện tại từ Firestore / LocalStorage
@@ -55,15 +62,16 @@ export default function CodingProblemManager({ subject, onBack }) {
   const handleAddNew = () => {
     setEditingProblem({
       id: '',
+      lessonNo: problems.length + 1,
       title: '',
       difficulty: 'Dễ',
       category: 'Cơ bản',
       description: 'Cho số nguyên <code>n</code>, viết hàm... <br/>',
       templates: {
-        java: `class Solution {\n    public int solve(int n) {\n        // Viết code Java ở đây\n        return 0;\n    }\n}`,
-        python: `def solve(n: int) -> int:\n    # Viết code Python ở đây\n    return 0`,
-        cpp: `int solve(int n) {\n    // Viết code C++ ở đây\n    return 0;\n}`,
-        c: `int solve(int n) {\n    // Viết code C ở đây\n    return 0;\n}`
+        java: `public class Solution {\n    public static void main(String[] args) {\n        // Viết code Java ở đây\n    }\n}`,
+        python: `# Viết code Python ở đây\n`,
+        cpp: `#include <iostream>\nusing namespace std;\n\nint main() {\n    // Viết code C++ ở đây\n    return 0;\n}`,
+        c: `#include <stdio.h>\n\nint main() {\n    // Viết code C ở đây\n    return 0;\n}`
       },
       testCases: [
         { input: '[5]', output: '5', args: [5] }
@@ -83,7 +91,7 @@ export default function CodingProblemManager({ subject, onBack }) {
 
   const handleRemoveTestCase = (index) => {
     if (editingProblem.testCases.length <= 1) {
-      setErrorMsg('Đề thi phải có ít nhất 1 test case.');
+      setErrorMsg('Đề thi phải có ít nhất 1 test case. (Mã lỗi: EXAM-01)');
       return;
     }
     setEditingProblem(prev => ({
@@ -119,19 +127,19 @@ export default function CodingProblemManager({ subject, onBack }) {
 
     // Validate
     if (!editingProblem.id.trim()) {
-      setErrorMsg('Mã đề thi (ID) không được để trống.');
+      setErrorMsg('Mã đề thi (ID) không được để trống. (Mã lỗi: EXAM-02)');
       return;
     }
     if (!/^[a-zA-Z0-9_-]+$/.test(editingProblem.id)) {
-      setErrorMsg('Mã đề thi (ID) chỉ được chứa chữ cái, số, dấu gạch dưới (_) hoặc gạch ngang (-).');
+      setErrorMsg('Mã đề thi (ID) chỉ được chứa chữ cái, số, dấu gạch dưới (_) hoặc gạch ngang (-). (Mã lỗi: EXAM-03)');
       return;
     }
     if (!editingProblem.title.trim()) {
-      setErrorMsg('Tiêu đề đề thi không được để trống.');
+      setErrorMsg('Tiêu đề đề thi không được để trống. (Mã lỗi: EXAM-04)');
       return;
     }
     if (!editingProblem.description.trim()) {
-      setErrorMsg('Mô tả đề thi không được để trống.');
+      setErrorMsg('Mô tả đề thi không được để trống. (Mã lỗi: EXAM-05)');
       return;
     }
 
@@ -139,14 +147,14 @@ export default function CodingProblemManager({ subject, onBack }) {
     for (let i = 0; i < editingProblem.testCases.length; i++) {
       const tc = editingProblem.testCases[i];
       if (!tc.input.trim() || !tc.output.trim()) {
-        setErrorMsg(`Test case số ${i + 1} không được để trống dữ liệu đầu vào hoặc kết quả kỳ vọng.`);
+        setErrorMsg(`Test case số ${i + 1} không được để trống dữ liệu đầu vào hoặc kết quả kỳ vọng. (Mã lỗi: EXAM-06)`);
         return;
       }
     }
 
     // Kiểm tra trùng ID đối với đề thi mới
     if (isNew && problems.some(p => p.id === editingProblem.id)) {
-      setErrorMsg('Mã đề thi (ID) đã tồn tại. Vui lòng chọn mã khác.');
+      setErrorMsg('Mã đề thi (ID) đã tồn tại. Vui lòng chọn mã khác. (Mã lỗi: EXAM-07)');
       return;
     }
 
@@ -266,7 +274,18 @@ export default function CodingProblemManager({ subject, onBack }) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Thứ tự Bài (vd: 1 cho Bài 1)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="1"
+                      value={editingProblem.lessonNo || 1}
+                      onChange={(e) => setEditingProblem(prev => ({ ...prev, lessonNo: parseInt(e.target.value) || 1 }))}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Chủ đề / Phân loại</label>
                     <input
@@ -487,8 +506,22 @@ export default function CodingProblemManager({ subject, onBack }) {
           )}
           <div>
             <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-              {!subject && <Code2 className="h-6 w-6 text-primary dark:text-blue-500" />}
-              {subject ? `Môn Code: ${subject.name}` : 'Quản lý đề thi Lập trình'}
+              {!subject && <Code2 className="h-5 w-5 text-primary dark:text-blue-500" />}
+              {subject ? (
+                <span className="flex items-center gap-2">
+                  <span>Môn Code: <strong>{subject.name}</strong></span>
+                  {onUpdateSubject && (
+                    <button
+                      type="button"
+                      onClick={handleRenameSubject}
+                      className="text-slate-400 hover:text-amber-500 bg-slate-100 dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg p-1.5 transition cursor-pointer"
+                      title="Sửa tên môn học"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </span>
+              ) : 'Quản lý đề thi Lập trình'}
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {subject ? `Quản lý đề thi code của môn ${subject.name}` : 'Xem, chỉnh sửa, thêm mới hoặc xóa bỏ các bài thi lập trình trên hệ thống (Lưu trữ cục bộ LocalStorage)'}
@@ -520,7 +553,7 @@ export default function CodingProblemManager({ subject, onBack }) {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {problems.map((problem) => (
+          {[...problems].sort((a, b) => (a.lessonNo || 0) - (b.lessonNo || 0)).map((problem, idx) => (
             <Card key={problem.id} className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-3xl shadow-sm hover:shadow-md transition duration-200 overflow-hidden">
               <CardContent className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="flex items-start gap-4 flex-1">
@@ -529,6 +562,9 @@ export default function CodingProblemManager({ subject, onBack }) {
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-black bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-900/40">
+                        📘 Bài {problem.lessonNo || (idx + 1)}
+                      </span>
                       <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-snug">
                         {problem.title}
                       </h3>
@@ -541,7 +577,7 @@ export default function CodingProblemManager({ subject, onBack }) {
                       </span>
                     </div>
                     <div className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold font-mono">
-                      ID đề bài: {problem.id} • Hỗ trợ: Java, Python, C++, C, JS
+                      ID đề bài: {problem.id} • Hỗ trợ: Java, Python, C++, C
                     </div>
                     <p
                       className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed pt-1"

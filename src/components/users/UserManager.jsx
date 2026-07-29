@@ -4,6 +4,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Card, CardHeader, CardContent } from '../ui/Card';
 import UserModal from './UserModal';
+import { generateNextUserId } from '../../utils/idGenerator';
 
 export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUser }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -56,7 +57,7 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
     if (editingUser) {
       onUpdateUser(data);
     } else {
-      onAddUser({ ...data, id: 'user_' + Date.now() });
+      onAddUser({ ...data, id: generateNextUserId(users, 'default') });
     }
     setIsModalOpen(false);
   };

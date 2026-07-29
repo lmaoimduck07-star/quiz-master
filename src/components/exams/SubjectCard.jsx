@@ -1,6 +1,5 @@
-// src/components/exams/SubjectCard.jsx
 import { useState, useEffect } from 'react';
-import { BookOpen, CheckCircle, Trash2, ArrowRight, Code2, ShieldAlert } from 'lucide-react';
+import { BookOpen, CheckCircle, Trash2, ArrowRight, Code2, ShieldAlert, Pencil } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { storage } from '../../utils/storage';
 
@@ -12,6 +11,14 @@ export default function SubjectCard({ subject, onDelete, onOpen, onUpdate }) {
   const [targetState, setTargetState] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [enteredCode, setEnteredCode] = useState('');
+
+  const handleRenameSubject = (e) => {
+    e.stopPropagation();
+    const newName = prompt("Nhập tên mới cho môn học này:", subject.name);
+    if (newName !== null && newName.trim() !== "" && newName.trim() !== subject.name) {
+      onUpdate({ ...subject, name: newName.trim() });
+    }
+  };
 
   useEffect(() => {
     // Đồng bộ trạng thái code dựa trên trường status của môn học từ Firebase
@@ -41,7 +48,7 @@ export default function SubjectCard({ subject, onDelete, onOpen, onUpdate }) {
 
   const handleConfirmToggle = () => {
     if (enteredCode !== verificationCode) {
-      alert('Mã xác nhận chưa chính xác!');
+      alert('Mã xác nhận chưa chính xác! (Mã lỗi: SUBJ-02)');
       return;
     }
 
@@ -55,27 +62,35 @@ export default function SubjectCard({ subject, onDelete, onOpen, onUpdate }) {
   };
 
   return (
-    <div className={`relative flex items-center justify-between p-6 bg-white dark:bg-slate-900 border rounded-xl transition hover:shadow-lg transform hover:-translate-y-1 ${isCompleted ? 'border-emerald-500 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20' : 'border-slate-200 dark:border-slate-800'}`}>
+    <div className={`relative flex items-center justify-between p-5 bg-white dark:bg-slate-900 border rounded-2xl transition hover:shadow-md ${isCompleted ? 'border-emerald-500 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20' : 'border-slate-200 dark:border-slate-800'}`}>
 
       <div className="flex items-center gap-4 flex-1">
-        <div className={`p-4 rounded-xl ${isCoding
+        <div className={`p-3 rounded-xl ${isCoding
             ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
             : isCompleted
               ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
               : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-350'
           }`}>
           {isCoding ? (
-            <Code2 className="h-8 w-8" />
+            <Code2 className="h-6 w-6" />
           ) : isCompleted ? (
-            <CheckCircle className="h-8 w-8" />
+            <CheckCircle className="h-6 w-6" />
           ) : (
-            <BookOpen className="h-8 w-8" />
+            <BookOpen className="h-6 w-6" />
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 m-0 leading-snug truncate">
-              {subject.name}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 m-0 leading-snug truncate flex items-center gap-2">
+              <span>{subject.name}</span>
+              <button
+                type="button"
+                onClick={handleRenameSubject}
+                className="text-slate-400 hover:text-amber-500 bg-slate-100 dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg p-1 transition cursor-pointer"
+                title="Sửa tên môn học"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
             </h3>
 
             {/* Nút gạt chuyển chế độ Code bên cạnh tiêu đề môn học */}

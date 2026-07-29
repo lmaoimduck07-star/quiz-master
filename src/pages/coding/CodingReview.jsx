@@ -63,7 +63,7 @@ function ScoreRing({ score, label, color, max = 10 }) {
 export default function CodingReview() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const userId = currentUser?.id || currentUser?.uid;
+  const userId = currentUser?.id;
   const session = getSession(userId);
 
   const problem = session?.problem || { title: 'Bài thi lập trình' };

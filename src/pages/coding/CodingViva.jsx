@@ -31,7 +31,7 @@ const TOTAL_QUESTIONS = 5;
 export default function CodingViva() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const userId = currentUser?.id || currentUser?.uid;
+  const userId = currentUser?.id;
   const session = getSession(userId);
 
   const problem = session?.problem || {};

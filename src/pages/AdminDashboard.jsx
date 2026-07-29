@@ -4,20 +4,22 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { LayoutDashboard, Users, FileText, Activity, LogOut, Upload, Search, ChevronLeft, ChevronRight, BookOpen, Sun, Moon, Code2 } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Activity, LogOut, Upload, Search, ChevronLeft, ChevronRight, BookOpen, Sun, Moon, Code2, Settings } from 'lucide-react';
 import SubjectManager from '../components/exams/SubjectManager';
 import ExamManager from '../components/exams/ExamManager';
 import ExamEditor from '../components/exams/ExamEditor';
 import UserManager from '../components/users/UserManager';
 import AuditLogManager from '../components/audit/AuditLogManager';
 import CodingProblemManager from '../components/exams/CodingProblemManager';
+import SystemSettingsManager from '../components/settings/SystemSettingsManager';
+import LiveMonitor from '../components/admin/LiveMonitor';
 import { storage } from '../utils/storage';
 import { useAuth } from '../context/AuthContext';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { logout, currentUser, activeRole } = useAuth();
-  const [activeTab, setActiveTab] = useState('subjects'); // 'exams' | 'users' | 'audit' | 'subjects'
+  const [activeTab, setActiveTab] = useState('live_monitor'); // Mặc định mở Live Monitor hoặc 'subjects'
 
   // Theme State
   const [theme, setTheme] = useState(() => localStorage.getItem('qm_theme') || 'light');
@@ -33,7 +35,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Load data từ Firestore khi mount
+  // Load & Lắng nghe dữ liệu Firestore Realtime
   const [subjects, setSubjects] = useState([]);
   const [currentSubject, setCurrentSubject] = useState(null);
   const [editingExamId, setEditingExamId] = useState(null);
@@ -42,19 +44,29 @@ export default function AdminDashboard() {
   const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
-    async function loadAll() {
-      setDataLoading(true);
-      const [s, u, l] = await Promise.all([
-        storage.loadSubjects(),
-        storage.loadUsers(),
-        storage.loadAuditLogs(),
-      ]);
-      setSubjects(s);
-      setUsers(u);
-      setLogs(l);
+    setDataLoading(true);
+
+    // Lắng nghe Realtime môn học
+    const unsubSubj = storage.subscribeSubjects((s) => {
+      setSubjects(s || []);
       setDataLoading(false);
-    }
-    loadAll();
+    });
+
+    // Lắng nghe Realtime tài khoản
+    const unsubUsers = storage.subscribeUsers((u) => {
+      setUsers(u || []);
+    });
+
+    // Lắng nghe Realtime nhật ký
+    const unsubLogs = storage.subscribeAuditLogs((l) => {
+      setLogs(l || []);
+    });
+
+    return () => {
+      if (typeof unsubSubj === 'function') unsubSubj();
+      if (typeof unsubUsers === 'function') unsubUsers();
+      if (typeof unsubLogs === 'function') unsubLogs();
+    };
   }, []);
 
   // Auto-save khi subjects thay đổi (Chỉ lưu sau khi đã tải xong dữ liệu từ Firebase)
@@ -131,6 +143,16 @@ export default function AdminDashboard() {
           </div>
           <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto">
             <button
+              onClick={() => setActiveTab('live_monitor')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md font-medium transition-colors ${activeTab === 'live_monitor' ? 'bg-primary text-white' : 'hover:bg-slate-800 hover:text-white'}`}
+            >
+              <span className="flex items-center gap-3">
+                <Activity className="h-5 w-5 text-emerald-400" /> Live Monitor
+              </span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('subjects')}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${activeTab === 'subjects' ? 'bg-primary text-white' : 'hover:bg-slate-800 hover:text-white'}`}
             >
@@ -149,6 +171,12 @@ export default function AdminDashboard() {
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${activeTab === 'audit' ? 'bg-primary text-white' : 'hover:bg-slate-800 hover:text-white'}`}
             >
               <Activity className="h-5 w-5" /> Audit Log
+            </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${activeTab === 'settings' ? 'bg-primary text-white' : 'hover:bg-slate-800 hover:text-white'}`}
+            >
+              <Settings className="h-5 w-5" /> Cấu hình hệ thống
             </button>
 
             <div className="h-px bg-slate-800 my-4" />
@@ -172,7 +200,7 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <div className={`flex-1 flex flex-col min-h-screen bg-slate-50 dark:bg-slate-950 ${editingExamId === null ? 'md:pl-64' : ''}`}>
         {editingExamId === null && (
-          <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 flex justify-between md:justify-end items-center transition-colors">
+          <header className="sticky top-0 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 p-4 flex justify-between md:justify-end items-center transition-colors shadow-sm">
             <div className="md:hidden">
               <h2 className="text-lg font-black text-primary dark:text-blue-500 flex items-center gap-1.5 m-0">
                 <LayoutDashboard className="h-5 w-5" /> Admin Panel
@@ -210,6 +238,10 @@ export default function AdminDashboard() {
         )}
 
         <main className={`flex-1 overflow-y-auto ${editingExamId === null ? 'p-6' : 'p-0'}`}>
+          {activeTab === 'live_monitor' && (
+            <LiveMonitor />
+          )}
+
           {activeTab === 'subjects' && (
             <div className="space-y-6">
               {(() => {
@@ -253,6 +285,7 @@ export default function AdminDashboard() {
                       <CodingProblemManager
                         subject={currentSubject}
                         onBack={() => setCurrentSubject(null)}
+                        onUpdateSubject={handleUpdateSubject}
                       />
                     );
                   }
@@ -309,6 +342,12 @@ export default function AdminDashboard() {
           {activeTab === 'audit' && (
             <div className="space-y-6">
               <AuditLogManager logs={logs} />
+            </div>
+          )}
+
+          {activeTab === 'settings' && (
+            <div className="space-y-6">
+              <SystemSettingsManager onAddLog={addLog} />
             </div>
           )}
 

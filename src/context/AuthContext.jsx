@@ -4,6 +4,7 @@ import { auth, googleProvider, db } from '../firebase/config';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { storage } from '../utils/storage';
 import { useF12Detector } from '../hooks/useF12Detector';
+import { generateNextUserId } from '../utils/idGenerator';
 
 const AuthContext = createContext(null);
 
@@ -36,7 +37,7 @@ export function AuthProvider({ children }) {
       alert(
         '🔒 TÀI KHOẢN ĐÃ BỊ KHÓA\n\n' +
         'Tài khoản của bạn đã bị khóa tự động do mở DevTools/F12 quá số lần cho phép.\n' +
-        'Vui lòng liên hệ Admin để được hỗ trợ mở khóa.'
+        'Vui lòng liên hệ Admin để được hỗ trợ mở khóa. (Mã lỗi: AUTH-08)'
       );
     }, 100);
   }, []);
@@ -86,7 +87,7 @@ export function AuthProvider({ children }) {
         alert(
           '🔒 TÀI KHOẢN ĐÃ BỊ KHÓA\n\n' +
           'Tài khoản của bạn đã bị khóa bởi Admin.\n' +
-          'Vui lòng liên hệ Admin để được hỗ trợ mở khóa.'
+          'Vui lòng liên hệ Admin để được hỗ trợ mở khóa. (Mã lỗi: AUTH-07)'
         );
         return;
       }
@@ -108,6 +109,52 @@ export function AuthProvider({ children }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id]);
 
+  // 同步 Presence realtime lên Firestore cho Live Monitor (có Heartbeat & Cleanup)
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const userId = currentUser.id;
+    const presenceId = `presence_${userId}`;
+
+    let onlineSince = sessionStorage.getItem('qm_online_since');
+    if (!onlineSince) {
+      onlineSince = new Date().toISOString();
+      sessionStorage.setItem('qm_online_since', onlineSince);
+    }
+
+    const updatePresence = () => {
+      storage.updateActiveSession(presenceId, {
+        sessionId: presenceId,
+        userId: currentUser.id,
+        studentName: currentUser.fullName || currentUser.username || 'Học sinh',
+        role: activeRole || currentUser.role || 'Student',
+        mode: 'presence',
+        examTitle: 'Đang hoạt động trên hệ thống',
+        status: 'online',
+        onlineSince,
+      });
+    };
+
+    // 1. Cập nhật ngay khi mount / login
+    updatePresence();
+
+    // 2. Heartbeat định kỳ 15s để duy trì trạng thái Online realtime
+    const heartbeatTimer = setInterval(updatePresence, 15000);
+
+    // 3. Xóa session khi đóng tab / tắt trình duyệt
+    const handleTabClose = () => {
+      storage.removeActiveSession(presenceId);
+    };
+
+    window.addEventListener('beforeunload', handleTabClose);
+    window.addEventListener('pagehide', handleTabClose);
+
+    return () => {
+      clearInterval(heartbeatTimer);
+      window.removeEventListener('beforeunload', handleTabClose);
+      window.removeEventListener('pagehide', handleTabClose);
+    };
+  }, [currentUser?.id, activeRole]);
+
   // Đăng nhập username/password
   const login = async (username, password) => {
     const users = await storage.loadUsers();
@@ -116,8 +163,8 @@ export function AuthProvider({ children }) {
       const matchEmail = u.email?.toLowerCase() === username.trim().toLowerCase();
       return (matchUsername || matchEmail) && u.password === password;
     });
-    if (!user) throw new Error('Sai tên đăng nhập hoặc mật khẩu!');
-    if (user.status === 'Locked') throw new Error('Tài khoản của bạn đã bị khóa, vui lòng liên hệ với Admin để được hỗ trợ');
+    if (!user) throw new Error('Sai tên đăng nhập hoặc mật khẩu! (Mã lỗi: AUTH-01)');
+    if (user.status === 'Locked') throw new Error('Tài khoản của bạn đã bị khóa, vui lòng liên hệ với Admin để được hỗ trợ. (Mã lỗi: AUTH-02)');
     if (user.roles?.length > 1) return { requiresRoleSelection: true, user };
     const role = user.roles?.[0] || 'Student';
     completeLogin(user, role);
@@ -135,6 +182,10 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     if (currentUser) {
       storage.addAuditLog({ user: currentUser.username, role: activeRole, category: 'System', action: 'Đăng xuất khỏi hệ thống', severity: 'Info' });
+      // Xóa lập tức presence session khỏi Firestore khi người dùng bấm Đăng xuất
+      const presenceId = `presence_${currentUser.id}`;
+      await storage.removeActiveSession(presenceId);
+      sessionStorage.removeItem('qm_online_since');
     }
     if (localStorage.getItem('qm_google_session') === 'true') {
       try { await signOut(auth); } catch (_) { }
@@ -161,11 +212,11 @@ export function AuthProvider({ children }) {
       );
       if (!user) {
         await signOut(auth).catch(() => { });
-        throw new Error(`Email ${googleEmail} chưa được đăng ký trong hệ thống! Vui lòng đăng ký tài khoản trước hoặc liên hệ Admin.`);
+        throw new Error(`Email ${googleEmail} chưa được đăng ký trong hệ thống! Vui lòng đăng ký tài khoản trước hoặc liên hệ Admin. (Mã lỗi: AUTH-03)`);
       }
       if (user.status === 'Locked') {
         await signOut(auth).catch(() => { });
-        throw new Error('Tài khoản của bạn đã bị khóa, vui lòng liên hệ Admin.');
+        throw new Error('Tài khoản của bạn đã bị khóa, vui lòng liên hệ Admin. (Mã lỗi: AUTH-02)');
       }
       localStorage.setItem('qm_google_session', 'true');
       if (user.roles?.length > 1) {
@@ -176,13 +227,13 @@ export function AuthProvider({ children }) {
       return { requiresRoleSelection: false, user, role };
     } catch (err) {
       if (err.code === 'auth/unauthorized-domain') {
-        throw new Error(`Tên miền ${window.location.hostname} chưa được thêm vào Authorized Domains trong Firebase Console!`);
+        throw new Error(`Tên miền ${window.location.hostname} chưa được thêm vào Authorized Domains trong Firebase Console! (Mã lỗi: AUTH-04)`);
       }
       if (err.code === 'auth/popup-closed-by-user') {
-        throw new Error('Cửa sổ đăng nhập Google đã bị đóng trước khi hoàn tất.');
+        throw new Error('Cửa sổ đăng nhập Google đã bị đóng trước khi hoàn tất. (Mã lỗi: AUTH-05)');
       }
       if (err.code === 'auth/operation-not-allowed') {
-        throw new Error('Tính năng đăng nhập Google chưa được kích hoạt trong Firebase Console.');
+        throw new Error('Tính năng đăng nhập Google chưa được kích hoạt trong Firebase Console. (Mã lỗi: AUTH-06)');
       }
       throw err;
     } finally {
@@ -204,7 +255,7 @@ export function AuthProvider({ children }) {
       if (existing) {
         if (existing.status === 'Locked') {
           await signOut(auth).catch(() => { });
-          throw new Error('Tài khoản của bạn đã bị khóa, vui lòng liên hệ Admin.');
+          throw new Error('Tài khoản của bạn đã bị khóa, vui lòng liên hệ Admin. (Mã lỗi: AUTH-02)');
         }
         localStorage.setItem('qm_google_session', 'true');
         completeLogin(existing, existing.roles?.[0] || 'Student');
@@ -219,11 +270,11 @@ export function AuthProvider({ children }) {
         finalUsername = base + counter++;
       }
       const newUser = {
-        id: 'U_' + Date.now(),
+        id: generateNextUserId(users, 'google'),
         fullName: googleName,
         username: finalUsername,
         email: googleEmail,
-        password: '',
+        password: '12345678',
         roles: ['Student'],
         status: 'Active',
         authProvider: 'google',
@@ -253,6 +304,6 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
+  if (!context) throw new Error('useAuth must be used within an AuthProvider (Mã lỗi: SYS-01)');
   return context;
 }

@@ -312,9 +312,11 @@ export async function pingPiston() {
   try {
     const { apiUrl } = getPistonConfig();
     const pingUrl = apiUrl.replace(/\/execute$/, '/runtimes');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
     const res = await fetch(pingUrl, {
-      signal: AbortSignal.timeout(5000),
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
     return res.ok;
   } catch {
     return false;

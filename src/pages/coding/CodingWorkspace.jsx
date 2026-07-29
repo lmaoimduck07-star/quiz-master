@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/Button';
 import Editor from '@monaco-editor/react';
 import {
   Play, Send, Loader2, ArrowLeft, Terminal,
-  CheckCircle2, XCircle, Plus, Eye, X, Wifi, WifiOff
+  CheckCircle2, XCircle, Plus, Eye, X, Wifi, WifiOff, Lock
 } from 'lucide-react';
 import { getSession, updateSession } from '../../utils/codingSession';
 import { executeCode, pingPiston, ERROR_CODES } from '../../utils/pistonApi';
@@ -39,19 +39,17 @@ function LoadingScreen({ step, steps, ping }) {
           {steps.map((_, i) => (
             <div
               key={i}
-              className={`h-1.5 rounded-full transition-all duration-500 ${
-                i <= step ? 'bg-blue-500 w-6' : 'bg-slate-700 w-1.5'
-              }`}
+              className={`h-1.5 rounded-full transition-all duration-500 ${i <= step ? 'bg-blue-500 w-6' : 'bg-slate-700 w-1.5'
+                }`}
             />
           ))}
         </div>
 
         {/* Ping status */}
-        <div className={`flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-wider ${
-          ping === null ? 'text-slate-500' : ping ? 'text-emerald-400' : 'text-amber-400'
-        }`}>
+        <div className={`flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-wider ${ping === null ? 'text-slate-500' : ping ? 'text-emerald-400' : 'text-amber-400'
+          }`}>
           {ping === null ? <Loader2 className="h-3 w-3 animate-spin" /> :
-           ping ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+            ping ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
           {ping === null ? 'Đang kết nối...' : ping ? 'Máy chủ sẵn sàng' : 'Máy chủ phản hồi chậm'}
         </div>
       </div>
@@ -59,11 +57,34 @@ function LoadingScreen({ step, steps, ping }) {
   );
 }
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+function getMainFileName(lang) {
+  return lang === 'java' ? 'Solution.java' :
+    lang === 'cpp' ? 'Solution.cpp' :
+      lang === 'c' ? 'solution.c' : 'solution.py';
+}
+
+function getDefaultTemplate(lang) {
+  if (lang === 'python') return '# Viết code Python ở đây\n\n';
+  if (lang === 'java') return 'public class Solution {\n    public static void main(String[] args) {\n        // Viết code Java ở đây\n    }\n}\n';
+  if (lang === 'cpp') return '#include <iostream>\nusing namespace std;\n\nint main() {\n    // Viết code C++ ở đây\n    return 0;\n}\n';
+  if (lang === 'c') return '#include <stdio.h>\n\nint main() {\n    // Viết code C ở đây\n    return 0;\n}\n';
+  return '';
+}
+
+function getFileExt(lang) {
+  return lang === 'java' ? '.java' : lang === 'cpp' ? '.cpp' : lang === 'c' ? '.c' : '.py';
+}
+
+const isMainFile = (name) =>
+  name === 'Solution.java' || name === 'Solution.cpp' ||
+  name === 'solution.c' || name === 'solution.py';
+
 // ─── Main Workspace ───────────────────────────────────────────────────────────
 export default function CodingWorkspace() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const userId = currentUser?.id || currentUser?.uid;
+  const userId = currentUser?.id || 'guest';
   const session = getSession(userId);
 
   // Redirect nếu không có session
@@ -107,48 +128,81 @@ export default function CodingWorkspace() {
     'Sẵn sàng! Đang mở workspace...',
   ];
 
-  // ── Loading init ──
+  const [isTerminatedByAdmin, setIsTerminatedByAdmin] = useState(false);
+  const lastAdminMsgTimeRef = useRef(null);
+  const codingSessionId = session ? (`coding_${userId}_${problem.id || 'prob'}`) : null;
+
+  // ── Sync Realtime Session & Listen for Remote Locks ──
+  useEffect(() => {
+    if (!codingSessionId || isTerminatedByAdmin) return;
+
+    // Đẩy thông tin session thi code lên Firestore
+    storage.updateActiveSession(codingSessionId, {
+      sessionId: codingSessionId,
+      userId: currentUser?.id || 'guest',
+      studentName: currentUser?.fullName || currentUser?.username || 'Học sinh',
+      examId: problem.id || 'coding',
+      examTitle: `[Code] ${problem.title || 'Bài thi Lập trình'}`,
+      mode: 'coding',
+      codeLanguage: selectedLang,
+      status: 'online',
+    });
+
+    // Lắng nghe lệnh khóa từ xa từ Admin Live Monitor
+    const unsub = storage.subscribeActiveSessions((allSessions) => {
+      const mySession = allSessions.find(s => s.id === codingSessionId);
+      if (mySession) {
+        if (mySession.status === 'terminated') {
+          setIsTerminatedByAdmin(true);
+        } else if (mySession.adminMessage && mySession.adminMessageTime !== lastAdminMsgTimeRef.current) {
+          lastAdminMsgTimeRef.current = mySession.adminMessageTime;
+          alert(`💬 THÔNG BÁO TỪ GIÁM THỊ:\n"${mySession.adminMessage}"`);
+        }
+      }
+    });
+
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
+  }, [codingSessionId, currentUser, problem, selectedLang, isTerminatedByAdmin]);
+
+  // ── Loading init (có fail-safe chống kẹt đen màn hình) ──
   useEffect(() => {
     if (!session) return;
-    let step = 0;
     setInitStep(0);
 
-    // Step 0: Ping Piston
-    pingPiston().then(ok => {
-      setPingStatus(ok);
-      step = 1;
-      setInitStep(1);
+    let isCancelled = false;
 
-      setTimeout(() => {
-        step = 2;
-        setInitStep(2);
-        setTimeout(() => setIsInitializing(false), 600);
-      }, 600);
-    });
+    // Timer bảo vệ: Sau tối đa 2s tự động vào workspace bất kể ping server thế nào
+    const maxTimer = setTimeout(() => {
+      if (!isCancelled) setIsInitializing(false);
+    }, 2000);
+
+    pingPiston()
+      .then(ok => {
+        if (isCancelled) return;
+        setPingStatus(ok);
+        setInitStep(1);
+        setTimeout(() => {
+          if (isCancelled) return;
+          setInitStep(2);
+          setTimeout(() => {
+            if (!isCancelled) setIsInitializing(false);
+          }, 300);
+        }, 300);
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setPingStatus(false);
+          setIsInitializing(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(maxTimer);
+    };
   }, []); // eslint-disable-line
-
-  // ── Helpers ──
-  function getMainFileName(lang) {
-    return lang === 'java' ? 'Solution.java' :
-           lang === 'cpp'  ? 'Solution.cpp'  :
-           lang === 'c'    ? 'solution.c'    : 'solution.py';
-  }
-
-  function getDefaultTemplate(lang) {
-    if (lang === 'python') return '# Viết code Python ở đây\n\n';
-    if (lang === 'java') return 'public class Solution {\n    public static void main(String[] args) {\n        // Viết code Java ở đây\n    }\n}\n';
-    if (lang === 'cpp') return '#include <iostream>\nusing namespace std;\n\nint main() {\n    // Viết code C++ ở đây\n    return 0;\n}\n';
-    if (lang === 'c') return '#include <stdio.h>\n\nint main() {\n    // Viết code C ở đây\n    return 0;\n}\n';
-    return '';
-  }
-
-  function getFileExt(lang) {
-    return lang === 'java' ? '.java' : lang === 'cpp' ? '.cpp' : lang === 'c' ? '.c' : '.py';
-  }
-
-  const isMainFile = (name) =>
-    name === 'Solution.java' || name === 'Solution.cpp' ||
-    name === 'solution.c' || name === 'solution.py';
 
   // ── Editor ──
   const handleEditorChange = (value) => {
@@ -164,7 +218,7 @@ export default function CodingWorkspace() {
     const ext = getFileExt(selectedLang);
     let fullName = newFileName.trim();
     if (!fullName.endsWith(ext)) fullName += ext;
-    if (files[fullName]) { alert('File này đã tồn tại!'); return; }
+    if (files[fullName]) { alert('File này đã tồn tại! (Mã lỗi: SYS-05)'); return; }
 
     const updated = { ...files, [fullName]: `# File phụ trợ\n` };
     setFiles(updated);
@@ -192,7 +246,7 @@ export default function CodingWorkspace() {
     if (mainCode.trim().length < 5) {
       setConsoleLogs(prev => [...prev,
         `─────────────────────────────────`,
-        `[Lỗi] Code quá ngắn hoặc rỗng. Hãy viết code trước khi chạy. (Mã lỗi: ${ERROR_CODES.C01})`,
+      `[Lỗi] Code quá ngắn hoặc rỗng. Hãy viết code trước khi chạy. (Mã lỗi: ${ERROR_CODES.C01})`,
       ]);
       return;
     }
@@ -201,7 +255,7 @@ export default function CodingWorkspace() {
     const langLabel = selectedLang === 'cpp' ? 'C++' : selectedLang.toUpperCase();
     setConsoleLogs(prev => [...prev,
       `─────────────────────────────────`,
-      `[System] Đang gửi code ${langLabel} đến máy chủ thực thi...`,
+    `[System] Đang gửi code ${langLabel} đến máy chủ thực thi...`,
     ]);
 
     try {
@@ -211,7 +265,7 @@ export default function CodingWorkspace() {
       const code = err.code || 'C05';
       setConsoleLogs(prev => [...prev,
         `─────────────────────────────────`,
-        `[Lỗi ${code}] ${err.message}`,
+      `[Lỗi ${code}] ${err.message}`,
       ]);
     } finally {
       setIsRunning(false);
@@ -256,7 +310,7 @@ export default function CodingWorkspace() {
       const code = err.code || 'C05';
       setConsoleLogs(prev => [...prev,
         `─────────────────────────────────`,
-        `[Lỗi ${code}] ${err.message}`,
+      `[Lỗi ${code}] ${err.message}`,
       ]);
       // Vẫn cho phép nộp bài dù có lỗi chạy (lưu output rỗng)
       if (window.confirm('Code gặp lỗi khi chạy. Bạn vẫn muốn nộp bài và chuyển sang vấn đáp không?')) {
@@ -268,10 +322,36 @@ export default function CodingWorkspace() {
     }
   };
 
-  // ── Render loading ──
+  // ── Render loading & checks ──
   if (!session) return null;
+
   if (isInitializing) {
     return <LoadingScreen step={initStep} steps={INIT_STEPS} ping={pingStatus} />;
+  }
+
+  if (isTerminatedByAdmin) {
+    return (
+      <div className="fixed inset-0 z-[999999] bg-slate-950/98 backdrop-blur-2xl text-white flex flex-col items-center justify-center p-6 text-center select-none pointer-events-auto">
+        <div className="p-8 bg-red-950/40 border-2 border-red-600 rounded-3xl max-w-md w-full space-y-5 shadow-2xl animate-in zoom-in-95 duration-200">
+          <Lock className="h-16 w-16 text-red-500 mx-auto animate-bounce" />
+          <div className="space-y-2">
+            <h2 className="text-2xl font-black text-white m-0 uppercase tracking-tight">BÀI THI ĐÃ BỊ KHÓA TỪ XA</h2>
+            <div className="inline-block bg-red-500/20 text-red-400 font-extrabold text-xs px-3 py-1 rounded-full border border-red-500/40">
+              Giám thị đã dừng bài thi
+            </div>
+          </div>
+          <p className="text-xs text-slate-300 font-medium leading-relaxed bg-slate-900/80 p-4 rounded-2xl border border-slate-800">
+            Bài thi lập trình của bạn đã bị Giám thị dừng và khóa trực tiếp từ xa do vi phạm quy chế. Hệ thống đã thu bài tự động tại thời điểm bị khóa. Bạn không thể thao tác tiếp.
+          </p>
+          <Button
+            onClick={() => navigate('/coding/dashboard')}
+            className="w-full font-bold h-12 bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-lg border-transparent text-sm"
+          >
+            Quay về Danh sách đề thi
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   const monacoLang = selectedLang === 'cpp' ? 'cpp' : selectedLang === 'c' ? 'c' : selectedLang === 'java' ? 'java' : 'python';
@@ -325,10 +405,9 @@ export default function CodingWorkspace() {
         <div className="w-5/12 bg-slate-900/40 border-r border-slate-800 overflow-y-auto p-6 space-y-5 shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-lg">{problem.category}</span>
-            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
-              problem.difficulty === 'Dễ' ? 'bg-emerald-500/15 text-emerald-400' :
-              problem.difficulty === 'Trung bình' ? 'bg-amber-500/15 text-amber-400' : 'bg-red-500/15 text-red-400'
-            }`}>{problem.difficulty}</span>
+            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${problem.difficulty === 'Dễ' ? 'bg-emerald-500/15 text-emerald-400' :
+                problem.difficulty === 'Trung bình' ? 'bg-amber-500/15 text-amber-400' : 'bg-red-500/15 text-red-400'
+              }`}>{problem.difficulty}</span>
           </div>
           <h1 className="text-xl font-black text-white">{problem.title}</h1>
           <div className="h-px bg-slate-800" />
@@ -366,11 +445,10 @@ export default function CodingWorkspace() {
                   <div
                     key={name}
                     onClick={() => setActiveFile(name)}
-                    className={`group flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition select-none ${
-                      isActive
+                    className={`group flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition select-none ${isActive
                         ? 'bg-slate-800 text-blue-400 border border-slate-700'
                         : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
-                    }`}
+                      }`}
                   >
                     <span>{name}</span>
                     {!isMainFile(name) && (
@@ -429,14 +507,13 @@ export default function CodingWorkspace() {
             </div>
             <div className="flex-1 overflow-y-auto p-4 font-mono text-xs space-y-0.5 bg-black/40">
               {consoleLogs.map((log, i) => (
-                <div key={i} className={`whitespace-pre-wrap leading-5 ${
-                  log.startsWith('[System]') ? 'text-blue-400 font-bold' :
-                  log.startsWith('[Lỗi') ? 'text-red-400 font-bold' :
-                  log.startsWith('[Runtime Error]') ? 'text-red-400' :
-                  log.startsWith('[stderr]') ? 'text-amber-400' :
-                  log.startsWith('─') ? 'text-slate-700' :
-                  'text-slate-300'
-                }`}>
+                <div key={i} className={`whitespace-pre-wrap leading-5 ${log.startsWith('[System]') ? 'text-blue-400 font-bold' :
+                    log.startsWith('[Lỗi') ? 'text-red-400 font-bold' :
+                      log.startsWith('[Runtime Error]') ? 'text-red-400' :
+                        log.startsWith('[stderr]') ? 'text-amber-400' :
+                          log.startsWith('─') ? 'text-slate-700' :
+                            'text-slate-300'
+                  }`}>
                   {log}
                 </div>
               ))}

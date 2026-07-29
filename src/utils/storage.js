@@ -7,7 +7,7 @@ import {
   getDocs, getDoc,
   setDoc, addDoc, updateDoc, deleteDoc,
   query, orderBy, limit, writeBatch,
-  serverTimestamp
+  serverTimestamp, onSnapshot
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
@@ -74,7 +74,7 @@ ensureSeeded();
 async function loadUsers() {
   try {
     const snap = await getDocs(collection(db, 'users'));
-    const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const users = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     console.log('[Storage] loadUsers ->', users.length, 'users');
     return users;
   } catch (e) {
@@ -98,7 +98,8 @@ async function saveUsers(users) {
 
     // Upsert tất cả users
     users.forEach(user => {
-      batch.set(doc(db, 'users', user.id), user, { merge: true });
+      const normalizedUser = { ...user, id: user.id };
+      batch.set(doc(db, 'users', user.id), normalizedUser, { merge: true });
     });
 
     await batch.commit();
@@ -550,10 +551,22 @@ function loadSubjectCodingProblems(subjectId, subjectsList = []) {
     // 1. Kiểm tra trong subjectsList (nếu có từ Firestore)
     if (Array.isArray(subjectsList) && subjectsList.length > 0) {
       const sub = subjectsList.find(s => s.id === subjectId);
-      if (sub && Array.isArray(sub.codingProblems) && sub.codingProblems.length > 0) {
-        const clean = filterOldTestProblems(sub.codingProblems);
-        localStorage.setItem(`qm_subj_coding_probs_${subjectId}`, JSON.stringify(clean));
-        return clean;
+      if (sub) {
+        let extractedProblems = [];
+        // Tìm các field dạng bai_1, bai_2, lesson_1...
+        Object.keys(sub).forEach(key => {
+          if ((key.startsWith('bai_') || key.startsWith('lesson_') || key.startsWith('prob_')) && typeof sub[key] === 'object' && sub[key] !== null) {
+            extractedProblems.push(sub[key]);
+          }
+        });
+        if (extractedProblems.length === 0 && Array.isArray(sub.codingProblems)) {
+          extractedProblems = sub.codingProblems;
+        }
+        if (extractedProblems.length > 0) {
+          const clean = filterOldTestProblems(extractedProblems);
+          localStorage.setItem(`qm_subj_coding_probs_${subjectId}`, JSON.stringify(clean));
+          return clean;
+        }
       }
     }
 
@@ -581,14 +594,43 @@ async function saveSubjectCodingProblems(subjectId, problems) {
     const clean = filterOldTestProblems(problems);
     localStorage.setItem(`qm_subj_coding_probs_${subjectId}`, JSON.stringify(clean));
 
-    // Cập nhật trực tiếp Firestore document của môn học
-    await updateDoc(doc(db, 'subjects', subjectId), {
+    // Tạo các field riêng biệt bai_1, bai_2, bai_3... trực tiếp trên Firestore Document của môn học
+    const updateData = {
       codingProblems: clean,
       isCoding: true,
-    }).catch(async () => {
-      // Nếu doc chưa có field, set merge
-      await setDoc(doc(db, 'subjects', subjectId), { codingProblems: clean, isCoding: true }, { merge: true });
+    };
+
+    clean.forEach((prob, idx) => {
+      const lessonNum = prob.lessonNo || (idx + 1);
+      const fieldKey = `bai_${lessonNum}`;
+      updateData[fieldKey] = {
+        ...prob,
+        lessonNo: lessonNum,
+        updatedAt: new Date().toISOString()
+      };
     });
+
+    // Cập nhật lên Firestore môn học
+    await setDoc(doc(db, 'subjects', subjectId), updateData, { merge: true });
+
+    // Tạo thêm Subcollection 'lessons' trên Firestore cho từng bài
+    try {
+      const batch = writeBatch(db);
+      clean.forEach((prob, idx) => {
+        const lessonNum = prob.lessonNo || (idx + 1);
+        const lessonDocId = prob.id ? prob.id : `bai_${lessonNum}`;
+        batch.set(doc(db, 'subjects', subjectId, 'lessons', lessonDocId), {
+          ...prob,
+          lessonNo: lessonNum,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      });
+      await batch.commit();
+      console.log(`[Storage] Synced lessons to Firestore as separate fields (bai_1, bai_2...) & subcollection ✓`);
+    } catch (subErr) {
+      console.warn('[Storage] Subcollection lessons sync warning:', subErr);
+    }
+
     console.log('[Storage] saveSubjectCodingProblems -> saved to Firestore & LocalStorage ✓');
   } catch (e) {
     console.error('[Storage] saveSubjectCodingProblems FAILED:', e);
@@ -614,6 +656,112 @@ async function lockUserById(userId, reason = 'Vi phạm bảo mật') {
 }
 
 // ─────────────────────────────────────────────
+// SYSTEM SETTINGS (Cấu hình hệ thống Piston & Gemini)
+// ─────────────────────────────────────────────
+async function loadSystemSettings() {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'config'));
+    if (snap.exists()) {
+      return snap.data();
+    }
+  } catch (e) {
+    console.warn('[Storage] loadSystemSettings warning:', e);
+  }
+  return {
+    pistonUrl: localStorage.getItem('qm_piston_url') || '',
+    geminiKey: localStorage.getItem('qm_gemini_api_key') || '',
+  };
+}
+
+async function saveSystemSettings(settings) {
+  try {
+    await setDoc(doc(db, 'settings', 'config'), settings, { merge: true });
+    if (settings.pistonUrl) localStorage.setItem('qm_piston_url', settings.pistonUrl.trim());
+    if (settings.geminiKey) localStorage.setItem('qm_gemini_api_key', settings.geminiKey.trim());
+    console.log('[Storage] saveSystemSettings -> saved successfully');
+    return true;
+  } catch (e) {
+    console.error('[Storage] saveSystemSettings FAILED:', e);
+    return false;
+  }
+}
+
+// ─────────────────────────────────────────────
+// REALTIME SUBSCRIPTIONS (Lắng nghe Firestore Realtime)
+// ─────────────────────────────────────────────
+function subscribeSubjects(callback) {
+  return onSnapshot(collection(db, 'subjects'), (snap) => {
+    const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    callback(data);
+  }, (err) => console.warn('[Storage] subscribeSubjects error:', err));
+}
+
+function subscribeUsers(callback) {
+  return onSnapshot(collection(db, 'users'), (snap) => {
+    const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    callback(data);
+  }, (err) => console.warn('[Storage] subscribeUsers error:', err));
+}
+
+function subscribeAuditLogs(callback) {
+  const q = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(100));
+  return onSnapshot(q, (snap) => {
+    const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    callback(data);
+  }, (err) => console.warn('[Storage] subscribeAuditLogs error:', err));
+}
+
+function subscribeActiveSessions(callback) {
+  return onSnapshot(collection(db, 'active_sessions'), (snap) => {
+    const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    callback(data);
+  }, (err) => console.warn('[Storage] subscribeActiveSessions error:', err));
+}
+
+async function updateActiveSession(sessionId, sessionData) {
+  try {
+    const nowIso = new Date().toISOString();
+    await setDoc(doc(db, 'active_sessions', sessionId), {
+      ...sessionData,
+      lastActive: nowIso,
+      onlineSince: sessionData.onlineSince || nowIso
+    }, { merge: true });
+  } catch (e) {
+    console.warn('[Storage] updateActiveSession error:', e);
+  }
+}
+
+async function terminateActiveSessionRemotely(sessionId) {
+  try {
+    await updateDoc(doc(db, 'active_sessions', sessionId), {
+      status: 'terminated',
+      terminatedAt: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error('[Storage] terminateActiveSessionRemotely error:', e);
+  }
+}
+
+async function sendAdminAlertToStudent(sessionId, message) {
+  try {
+    await updateDoc(doc(db, 'active_sessions', sessionId), {
+      adminMessage: message,
+      adminMessageTime: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error('[Storage] sendAdminAlertToStudent error:', e);
+  }
+}
+
+async function removeActiveSession(sessionId) {
+  try {
+    await deleteDoc(doc(db, 'active_sessions', sessionId));
+  } catch (e) {
+    console.warn('[Storage] removeActiveSession error:', e);
+  }
+}
+
+// ─────────────────────────────────────────────
 // EXPORT — giữ nguyên interface cũ để không phá vỡ code hiện có
 // ─────────────────────────────────────────────
 export const storage = {
@@ -632,4 +780,14 @@ export const storage = {
   loadSubjectCodingProblems,
   saveSubjectCodingProblems,
   lockUserById,
+  loadSystemSettings,
+  saveSystemSettings,
+  subscribeSubjects,
+  subscribeUsers,
+  subscribeAuditLogs,
+  subscribeActiveSessions,
+  updateActiveSession,
+  terminateActiveSessionRemotely,
+  sendAdminAlertToStudent,
+  removeActiveSession,
 };

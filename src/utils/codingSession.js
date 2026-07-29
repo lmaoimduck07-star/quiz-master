@@ -10,26 +10,46 @@ const SESSION_KEY = 'qm_coding_session';
  * - 'review': Đang xem kết quả
  */
 
+function getDefaultTemplate(lang) {
+  if (lang === 'python') return '# Viết code Python ở đây\n\n';
+  if (lang === 'java') return 'public class Solution {\n    public static void main(String[] args) {\n        // Viết code Java ở đây\n    }\n}\n';
+  if (lang === 'cpp') return '#include <iostream>\nusing namespace std;\n\nint main() {\n    // Viết code C++ ở đây\n    return 0;\n}\n';
+  if (lang === 'c') return '#include <stdio.h>\n\nint main() {\n    // Viết code C ở đây\n    return 0;\n}\n';
+  return '';
+}
+
 // Lấy session hiện tại của user
 export const getSession = (userId) => {
   try {
-    const raw = localStorage.getItem(`${SESSION_KEY}_${userId}`);
-    if (!raw) return null;
-    return JSON.parse(raw);
+    if (userId) {
+      const raw = localStorage.getItem(`${SESSION_KEY}_${userId}`);
+      if (raw) return JSON.parse(raw);
+    }
+    // Fallback: Tìm session thi lập trình mới nhất trong localStorage
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(SESSION_KEY)) {
+        const item = localStorage.getItem(key);
+        if (item) return JSON.parse(item);
+      }
+    }
+    return null;
   } catch {
     return null;
   }
 };
 
 // Tạo session mới (khi bắt đầu làm bài)
-export const createSession = (userId, { problem, selectedLang }) => {
-  const initCode = problem.templates?.[selectedLang] || '';
+export const createSession = (userId, { problem, selectedLang, subjectId }) => {
+  const defaultCode = getDefaultTemplate(selectedLang);
+  const initCode = (problem && problem.templates?.[selectedLang]) ? problem.templates[selectedLang] : defaultCode;
   const mainFileName = selectedLang === 'java' ? 'Solution.java' : selectedLang === 'cpp' ? 'Solution.cpp' : selectedLang === 'c' ? 'solution.c' : 'solution.py';
   const session = {
-    userId,
-    problemId: problem.id,
-    problem,
-    selectedLang,
+    userId: userId || 'guest',
+    problemId: problem?.id || 'prob_1',
+    problem: problem || {},
+    selectedLang: selectedLang || 'python',
+    subjectId: subjectId || null,
     code: initCode,
     files: { [mainFileName]: initCode },
     lastOutput: '',       // Output terminal khi nộp bài (AI dùng để hỏi vấn đáp)
@@ -43,7 +63,8 @@ export const createSession = (userId, { problem, selectedLang }) => {
     createdAt: Date.now(),
     updatedAt: Date.now()
   };
-  localStorage.setItem(`${SESSION_KEY}_${userId}`, JSON.stringify(session));
+  const keyUserId = userId || 'guest';
+  localStorage.setItem(`${SESSION_KEY}_${keyUserId}`, JSON.stringify(session));
   return session;
 };
 

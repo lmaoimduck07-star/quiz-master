@@ -113,7 +113,7 @@ export default function ClientDashboard() {
     });
 
     if (allQuestions.length === 0) {
-      alert("Môn học này chưa có câu hỏi nào để tạo đề thi mô phỏng!");
+      alert("Môn học này chưa có câu hỏi nào để tạo đề thi mô phỏng! (Mã lỗi: DASH-01)");
       return;
     }
 
@@ -125,7 +125,7 @@ export default function ClientDashboard() {
 
   const handleConfirmSimulation = () => {
     if (enteredCode !== verificationCode) {
-      alert("Mã xác nhận chưa chính xác!");
+      alert("Mã xác nhận chưa chính xác! (Mã lỗi: DASH-02)");
       return;
     }
 

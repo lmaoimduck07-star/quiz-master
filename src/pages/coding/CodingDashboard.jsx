@@ -18,6 +18,12 @@ const LANG_LABELS = {
   c: 'C',
 };
 
+const diffColor = (diff) => {
+  if (diff === 'Khó') return 'bg-red-500/15 text-red-400 border border-red-500/30';
+  if (diff === 'Trung bình') return 'bg-amber-500/15 text-amber-400 border border-amber-500/30';
+  return 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
+};
+
 export default function CodingDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,7 +42,7 @@ export default function CodingDashboard() {
     async function loadData() {
       setIsLoading(true);
       // Đọc session hiện tại
-      const session = getSession(currentUser?.id || currentUser?.uid);
+      const session = getSession(currentUser?.id);
       setActiveSession(session);
 
       const targetSubjectId = subjectId || session?.subjectId;
@@ -83,7 +89,7 @@ export default function CodingDashboard() {
 
   const handleConfirmLang = () => {
     setShowLangModal(false);
-    const userId = currentUser?.id || currentUser?.uid;
+    const userId = currentUser?.id || 'guest';
     const targetSubjectId = subjectId || selectedProblem?.subjectId;
     const session = createSession(userId, {
       problem: selectedProblem,
@@ -95,13 +101,13 @@ export default function CodingDashboard() {
   };
 
   const handleResumeSession = () => {
-    const userId = currentUser?.id || currentUser?.uid;
+    const userId = currentUser?.id || 'guest';
     const path = getSessionRedirectPath(userId);
     if (path) navigate(path);
   };
 
   const handleCancelSession = () => {
-    const userId = currentUser?.id || currentUser?.uid;
+    const userId = currentUser?.id || 'guest';
     clearSession(userId);
     setActiveSession(null);
   };
@@ -219,17 +225,22 @@ export default function CodingDashboard() {
             </div>
           ) : (
             <div className="grid md:grid-cols-3 gap-6">
-              {problems.map((problem) => (
+              {[...problems].sort((a, b) => (a.lessonNo || 0) - (b.lessonNo || 0)).map((problem, idx) => (
                 <Card key={problem.id} className="border-slate-800 hover:border-blue-900/40 hover:shadow-lg hover:shadow-blue-950/10 transition-all duration-200 rounded-3xl overflow-hidden bg-slate-900">
                   <CardContent className="p-6 flex flex-col justify-between h-full space-y-5">
                     <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-lg">
-                          {problem.category}
+                      <div className="flex justify-between items-center flex-wrap gap-2">
+                        <span className="text-xs font-black text-indigo-300 bg-indigo-500/20 border border-indigo-700/50 px-2.5 py-1 rounded-lg">
+                          📘 Bài {problem.lessonNo || (idx + 1)}
                         </span>
-                        <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${diffColor(problem.difficulty)}`}>
-                          {problem.difficulty}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">
+                            {problem.category}
+                          </span>
+                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${diffColor(problem.difficulty)}`}>
+                            {problem.difficulty}
+                          </span>
+                        </div>
                       </div>
                       <h3 className="text-lg font-black text-white leading-snug">{problem.title}</h3>
                       <p
