@@ -266,53 +266,7 @@ export default function ClientDashboard() {
             </div>
           </div>
         </div>
-        {/* Phân hệ thi lập trình tự luận */}
-        {(() => {
-          if (isLoading) return null; // Ẩn khi đang tải danh sách môn học để tránh nháy giật giao diện
 
-          const hasCodingSubject = subjects.some(s => s.status === 'developer');
-          if (hasCodingSubject) return null; // Ẩn box này nếu đã có môn thi lập trình trong danh sách
-
-          const isAdmin = currentUser?.roles?.includes('Admin') || currentUser?.role === 'Admin';
-          const hasCodingPermission = currentUser?.permissions?.codingAccess === true || isAdmin;
-          return (
-            <div className={`p-8 rounded-3xl text-white shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-6 transition-all ${
-              hasCodingPermission 
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-900 dark:to-indigo-950' 
-                : 'bg-gradient-to-r from-slate-500 to-slate-600 dark:from-slate-800 dark:to-slate-900'
-            }`}>
-              <div>
-                <h2 className="text-2xl font-black mb-2 flex items-center gap-2">Phân hệ Thi Lập trình & Vấn đáp AI 🤖</h2>
-                <p className={`text-sm font-medium ${hasCodingPermission ? 'text-blue-100' : 'text-slate-300'}`}>
-                  Môi trường thi lập trình tự luận trực tuyến, chấm điểm testcases tự động và hỏi đáp trực tiếp 1:1 với Giám khảo AI.
-                </p>
-                {CODING_MAINTENANCE && (
-                  <p className="mt-2 text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                    🔧 Cổng lập trình đang tạm ngừng để bảo trì nâng cấp hệ thống. Vui lòng quay lại sau.
-                  </p>
-                )}
-                {!CODING_MAINTENANCE && !hasCodingPermission && (
-                  <p className="mt-2 text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                    🔒 Bạn chưa được cấp quyền truy cập. Vui lòng liên hệ Admin để được cấp quyền.
-                  </p>
-                )}
-              </div>
-              <Button 
-                onClick={handleEnterCoding}
-                disabled={CODING_MAINTENANCE || !hasCodingPermission}
-                className={`w-full md:w-auto font-bold h-12 px-6 rounded-xl shadow-md shrink-0 border-transparent ${
-                  CODING_MAINTENANCE
-                    ? 'bg-amber-500/20 text-amber-200 dark:bg-amber-500/10 dark:text-amber-300 cursor-not-allowed'
-                    : hasCodingPermission 
-                    ? 'bg-white hover:bg-slate-50 text-blue-600 dark:bg-white dark:hover:bg-slate-100 dark:text-blue-600' 
-                    : 'bg-white/20 text-white/60 dark:bg-white/10 dark:text-white/40 cursor-not-allowed'
-                }`}
-              >
-                {CODING_MAINTENANCE ? '🔧 Đang bảo trì' : hasCodingPermission ? 'Vào Cổng thi Lập trình' : '🔒 Chưa có quyền truy cập'}
-              </Button>
-            </div>
-          );
-        })()}
 
         {/* Môn học đang mở */}
         <div>
