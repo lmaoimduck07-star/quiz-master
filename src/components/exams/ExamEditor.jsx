@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import Taskbar from './Taskbar';
 import QuestionForms from './QuestionForms';
-import { parseWordFile } from '../../utils/wordParser'; // Nhúng bộ máy đọc Word
 import QuestionList from './QuestionList';
+import WordImportModal from './WordImportModal';
 import { FileText, Upload, Trash2, FileOutput } from 'lucide-react';
 import { Button } from '../ui/Button';
 
@@ -13,8 +13,8 @@ export default function ExamEditor({ subject, examId, onBack, onSaveExam }) {
     title: `Đề Thi - ${subject.name}`,
     time: 0, password: "", shuffleQ: true, shuffleA: true, encrypt: false, limitAttempts: 0, strictMode: false
   });
-  
   const [questions, setQuestions] = useState([]);
+  const [isWordImportOpen, setIsWordImportOpen] = useState(false);
 
   // 2. NẾU LÀ SỬA ĐỀ CŨ, LOAD DỮ LIỆU LÊN
   useEffect(() => {
@@ -41,31 +41,11 @@ export default function ExamEditor({ subject, examId, onBack, onSaveExam }) {
     setQuestions([...questions, newQuestion]);
   };
 
-  // 5. HÀM XỬ LÝ IMPORT TỪ FILE WORD
-  const handleWordUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    try {
-      // Báo hiệu đang xử lý
-      alert("⏳ Đang xử lý file Word. Vui lòng đợi vài giây...");
-      
-      // Chạy bộ máy bóc tách
-      const importedQuestions = await parseWordFile(file);
-      
-      if (importedQuestions.length > 0) {
-        // Nối mảng câu hỏi mới vào danh sách hiện tại
-        setQuestions(prev => [...prev, ...importedQuestions]);
-        alert(`✅ Đã nhập thành công ${importedQuestions.length} câu hỏi vào đề!`);
-      } else {
-        alert("❌ File không đúng định dạng nhận diện. (Mã lỗi: EXAM-09)");
-      }
-    } catch (err) {
-      alert("❌ Có lỗi xảy ra khi đọc file Word! (Mã lỗi: EXAM-10)");
-      console.error(err);
-    } finally {
-      // Reset input để có thể chọn lại cùng 1 file nếu cần
-      e.target.value = ""; 
+  // 5. HÀM NHẬN CÂU HỎI TỪ WORD IMPORT MODAL
+  const handleWordImport = (importedQuestions) => {
+    if (importedQuestions.length > 0) {
+      setQuestions(prev => [...prev, ...importedQuestions]);
+      alert(`✅ Đã nhập thành công ${importedQuestions.length} câu hỏi vào đề!`);
     }
   };
 
@@ -117,16 +97,12 @@ export default function ExamEditor({ subject, examId, onBack, onSaveExam }) {
                 
                 {/* NHÓM NÚT IMPORT */}
                 <div className="flex gap-2">
-                  <label className="cursor-pointer flex items-center gap-2 bg-sky-50 border border-sky-200 text-sky-600 hover:bg-sky-500 hover:text-white font-bold py-1.5 px-3 rounded-lg transition text-sm">
+                  <button
+                    onClick={() => setIsWordImportOpen(true)}
+                    className="cursor-pointer flex items-center gap-2 bg-sky-50 border border-sky-200 text-sky-600 hover:bg-sky-500 hover:text-white font-bold py-1.5 px-3 rounded-lg transition text-sm"
+                  >
                     <Upload className="h-4 w-4" /> NHẬP TỪ WORD (.docx)
-                    <input 
-                      type="file" 
-                      accept=".docx" 
-                      className="hidden" 
-                      onChange={handleWordUpload} 
-                    />
-                  </label>
-                  
+                  </button>
                   <button className="flex items-center gap-2 bg-slate-100 border border-slate-300 text-slate-400 font-bold py-1.5 px-3 rounded-lg text-sm cursor-not-allowed">
                     <FileOutput className="h-4 w-4" /> PDF (Bảo trì)
                   </button>
@@ -159,6 +135,13 @@ export default function ExamEditor({ subject, examId, onBack, onSaveExam }) {
 
         </div>
       </div>
+
+      {/* WORD IMPORT MODAL */}
+      <WordImportModal
+        isOpen={isWordImportOpen}
+        onClose={() => setIsWordImportOpen(false)}
+        onImport={handleWordImport}
+      />
 
     </div>
   );

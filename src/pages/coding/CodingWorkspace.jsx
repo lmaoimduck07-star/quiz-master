@@ -6,10 +6,11 @@ import { Button } from '../../components/ui/Button';
 import Editor from '@monaco-editor/react';
 import {
   Play, Send, Loader2, ArrowLeft, Terminal,
-  CheckCircle2, XCircle, Plus, Eye, X, Wifi, WifiOff, Lock
+  CheckCircle2, XCircle, Plus, Eye, X, Wifi, WifiOff, Lock, AlertTriangle
 } from 'lucide-react';
 import { getSession, updateSession } from '../../utils/codingSession';
 import { executeCode, pingPiston, ERROR_CODES } from '../../utils/pistonApi';
+import { storage } from '../../utils/storage';
 
 // ─── Màn hình loading ────────────────────────────────────────────────────────
 function LoadingScreen({ step, steps, ping }) {
@@ -128,13 +129,15 @@ export default function CodingWorkspace() {
     'Sẵn sàng! Đang mở workspace...',
   ];
 
+  const isLockOrDeletedRef = useRef(false);
   const [isTerminatedByAdmin, setIsTerminatedByAdmin] = useState(false);
+  const [isDeletedByAdmin, setIsDeletedByAdmin] = useState(false);
   const lastAdminMsgTimeRef = useRef(null);
   const codingSessionId = session ? (`coding_${userId}_${problem.id || 'prob'}`) : null;
 
-  // ── Sync Realtime Session & Listen for Remote Locks ──
+  // ── Sync Realtime Session & Listen for Remote Locks / Deletes ──
   useEffect(() => {
-    if (!codingSessionId || isTerminatedByAdmin) return;
+    if (!codingSessionId || isTerminatedByAdmin || isDeletedByAdmin || isLockOrDeletedRef.current) return;
 
     // Đẩy thông tin session thi code lên Firestore
     storage.updateActiveSession(codingSessionId, {
@@ -148,23 +151,37 @@ export default function CodingWorkspace() {
       status: 'online',
     });
 
-    // Lắng nghe lệnh khóa từ xa từ Admin Live Monitor
+    // Theo dõi xem session đã từng xuất hiện trong Firestore chưa
+    const hasSeenSessionRef = { current: false };
+
+    // Lắng nghe lệnh khóa / xóa từ xa từ Admin Live Monitor
     const unsub = storage.subscribeActiveSessions((allSessions) => {
       const mySession = allSessions.find(s => s.id === codingSessionId);
       if (mySession) {
+        hasSeenSessionRef.current = true;
         if (mySession.status === 'terminated') {
+          isLockOrDeletedRef.current = true;
           setIsTerminatedByAdmin(true);
+        } else if (mySession.status === 'deleted') {
+          isLockOrDeletedRef.current = true;
+          setIsDeletedByAdmin(true);
+          storage.removeActiveSession(codingSessionId);
         } else if (mySession.adminMessage && mySession.adminMessageTime !== lastAdminMsgTimeRef.current) {
           lastAdminMsgTimeRef.current = mySession.adminMessageTime;
           alert(`💬 THÔNG BÁO TỪ GIÁM THỊ:\n"${mySession.adminMessage}"`);
         }
+      } else if (hasSeenSessionRef.current && !isLockOrDeletedRef.current) {
+        // Session đã từng tồn tại nhưng bị xóa bởi Admin
+        isLockOrDeletedRef.current = true;
+        setIsDeletedByAdmin(true);
+        storage.removeActiveSession(codingSessionId);
       }
     });
 
     return () => {
       if (typeof unsub === 'function') unsub();
     };
-  }, [codingSessionId, currentUser, problem, selectedLang, isTerminatedByAdmin]);
+  }, [codingSessionId, currentUser, problem, selectedLang, isTerminatedByAdmin, isDeletedByAdmin]);
 
   // ── Loading init (có fail-safe chống kẹt đen màn hình) ──
   useEffect(() => {
@@ -327,6 +344,31 @@ export default function CodingWorkspace() {
 
   if (isInitializing) {
     return <LoadingScreen step={initStep} steps={INIT_STEPS} ping={pingStatus} />;
+  }
+
+  if (isDeletedByAdmin) {
+    return (
+      <div className="fixed inset-0 z-[999999] bg-slate-950/98 backdrop-blur-2xl text-white flex flex-col items-center justify-center p-6 text-center select-none pointer-events-auto">
+        <div className="p-8 bg-slate-900 border-2 border-amber-500/40 rounded-3xl max-w-md w-full space-y-5 shadow-2xl animate-in zoom-in-95 duration-200">
+          <AlertTriangle className="h-16 w-16 text-amber-400 mx-auto animate-bounce" />
+          <div className="space-y-2">
+            <h2 className="text-2xl font-black text-white m-0 uppercase tracking-tight">Session không hợp lệ</h2>
+            <div className="inline-block bg-amber-500/20 text-amber-400 font-extrabold text-xs px-3 py-1 rounded-full border border-amber-500/40">
+              Vui lòng liên hệ Admin
+            </div>
+          </div>
+          <p className="text-xs text-slate-300 font-medium leading-relaxed bg-slate-950/80 p-4 rounded-2xl border border-slate-800">
+            Session không hợp lệ, vui lòng liên hệ admin để được hỗ trợ
+          </p>
+          <Button
+            onClick={() => navigate('/coding/dashboard')}
+            className="w-full font-bold h-12 bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow-lg border-transparent text-sm"
+          >
+            Quay về Danh sách đề thi
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   if (isTerminatedByAdmin) {

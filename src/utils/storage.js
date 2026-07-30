@@ -753,6 +753,19 @@ async function sendAdminAlertToStudent(sessionId, message) {
   }
 }
 
+async function deleteActiveSessionRemotely(sessionId) {
+  try {
+    const docRef = doc(db, 'active_sessions', sessionId);
+    await setDoc(docRef, { status: 'deleted', deletedAt: new Date().toISOString() }, { merge: true });
+    setTimeout(async () => {
+      try { await deleteDoc(docRef); } catch (_) {}
+    }, 4000);
+  } catch (e) {
+    console.error('[Storage] deleteActiveSessionRemotely error:', e);
+    try { await deleteDoc(doc(db, 'active_sessions', sessionId)); } catch (_) {}
+  }
+}
+
 async function removeActiveSession(sessionId) {
   try {
     await deleteDoc(doc(db, 'active_sessions', sessionId));
@@ -788,6 +801,7 @@ export const storage = {
   subscribeActiveSessions,
   updateActiveSession,
   terminateActiveSessionRemotely,
+  deleteActiveSessionRemotely,
   sendAdminAlertToStudent,
   removeActiveSession,
 };

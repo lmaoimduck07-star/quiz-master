@@ -55,21 +55,7 @@ export default function MockExam() {
 
   // Extract state passed from ClientDashboard or fall back to saved session
   const examData = savedSession?.examData || location.state || null;
-
-  if (!examData) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center">
-        <AlertTriangle className="h-12 w-12 text-amber-400 mb-4 animate-bounce" />
-        <h2 className="text-xl font-bold mb-2">Chưa có bài thi nào được chọn</h2>
-        <p className="text-slate-400 text-sm mb-6 max-w-md">Vui lòng chọn môn học và bài thi thực tế từ trang chính để bắt đầu làm bài.</p>
-        <Button onClick={() => navigate('/client/dashboard')} className="font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 py-2.5 shadow-md">
-          Quay về Trang chính
-        </Button>
-      </div>
-    );
-  }
-
-  const { examId, title, questions = [], timeLimit = 15 * 60, mode, subjectName } = examData;
+  const { examId, title, questions = [], timeLimit = 15 * 60, mode, subjectName } = examData || {};
 
   const [examSessionCode] = useState(() => {
     return savedSession?.examSessionCode || location.state?.examSessionCode || `exam_${currentUser?.id || 'guest'}_${examId || 'quiz'}`;
@@ -97,7 +83,7 @@ export default function MockExam() {
   const [flagged, setFlagged] = useState(() => savedSession?.flagged || []);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
-  const examPassword = examData.password || examData.config?.password || '';
+  const examPassword = examData?.password || examData?.config?.password || '';
   const [screen, setScreen] = useState(() => {
     if (savedSession) return 'quiz';
     if (examPassword) return 'login';
@@ -127,7 +113,17 @@ export default function MockExam() {
     timeLeftRef.current = timeLeft;
   }, [timeLeft]);
 
-  const [isTerminatedByAdmin, setIsTerminatedByAdmin] = useState(false);
+  const isLockOrDeletedRef = useRef(false);
+  const [isDeletedByAdmin, setIsDeletedByAdmin] = useState(false);
+
+  // Khôi phục trạng thái bị khóa từ xa khi reload trang
+  // Dùng lại pattern qm_expired_sessions đã có sẵn trong file
+  const [isTerminatedByAdmin, setIsTerminatedByAdmin] = useState(() => {
+    const code = savedSession?.examSessionCode || location.state?.examSessionCode;
+    const expired = code ? isSessionExpired(code) : false;
+    if (expired) isLockOrDeletedRef.current = true;
+    return expired;
+  });
   const [actionLogs, setActionLogs] = useState([]);
 
   const logAction = (detail) => {
@@ -143,7 +139,7 @@ export default function MockExam() {
 
   // Sync active exam session to localStorage & Firestore Realtime
   useEffect(() => {
-    if (isSubmittedRef.current || isInvalidSession || isTerminatedByAdmin) return;
+    if (isSubmittedRef.current || isInvalidSession || isTerminatedByAdmin || isDeletedByAdmin || isLockOrDeletedRef.current) return;
     try {
       const session = {
         userId: currentUser?.id,
@@ -187,30 +183,56 @@ export default function MockExam() {
     } catch (e) {
       console.error('[Session] Error saving active session:', e);
     }
-  }, [answers, flagged, timeLeft, warningCount, currentUser, examId, examData, examSessionCode, isInvalidSession, currentQuestion, questions, title, mode, actionLogs, isTerminatedByAdmin]);
+  }, [answers, flagged, timeLeft, warningCount, currentUser, examId, examData, examSessionCode, isInvalidSession, currentQuestion, questions, title, mode, actionLogs, isTerminatedByAdmin, isDeletedByAdmin]);
 
-  // Lắng nghe lệnh từ xa của Admin (Live Monitor: Khóa từ xa / Nhắc nhở)
+  // Lắng nghe lệnh từ xa của Admin (Live Monitor: Khóa từ xa / Xóa thẻ / Nhắc nhở)
   useEffect(() => {
     if (!examSessionCode) return;
 
+    // Theo dõi xem session đã từng xuất hiện trong Firestore chưa
+    // Để phân biệt "chưa tạo" vs "đã bị xóa"
+    const hasSeenSessionRef = { current: false };
+
     const unsub = storage.subscribeActiveSessions((allSessions) => {
       const mySession = allSessions.find(s => s.id === examSessionCode);
+
       if (mySession) {
+        // Session tồn tại — đánh dấu đã thấy
+        hasSeenSessionRef.current = true;
+
         if (mySession.status === 'terminated' && !isSubmittedRef.current) {
+          // Persist trạng thái bị khóa vào localStorage để reload không bypass được
+          isLockOrDeletedRef.current = true;
+          markSessionAsExpired(examSessionCode);
+          localStorage.removeItem('qm_active_session');
           setIsTerminatedByAdmin(true);
           if (typeof submitExamRef.current === 'function') {
             submitExamRef.current(warningCountRef.current, 'Bị khóa từ xa');
           }
+        } else if (mySession.status === 'deleted' && !isSubmittedRef.current) {
+          isLockOrDeletedRef.current = true;
+          markSessionAsExpired(examSessionCode);
+          localStorage.removeItem('qm_active_session');
+          setIsDeletedByAdmin(true);
+          storage.removeActiveSession(examSessionCode);
         } else if (mySession.adminMessage && mySession.adminMessageTime !== lastAdminMsgTimeRef.current) {
           lastAdminMsgTimeRef.current = mySession.adminMessageTime;
           alert(`💬 THÔNG BÁO TỪ GIÁM THỊ:\n"${mySession.adminMessage}"`);
         }
+      } else if (hasSeenSessionRef.current && !isSubmittedRef.current && !isLockOrDeletedRef.current) {
+        // Session đã từng tồn tại nhưng bây giờ bị xóa khỏi Firestore bởi Admin
+        isLockOrDeletedRef.current = true;
+        markSessionAsExpired(examSessionCode);
+        localStorage.removeItem('qm_active_session');
+        setIsDeletedByAdmin(true);
+        storage.removeActiveSession(examSessionCode);
       }
     });
 
     return () => {
       if (typeof unsub === 'function') unsub();
     };
+
   }, [examSessionCode]);
 
   const isReloadingRef = useRef(false);
@@ -483,27 +505,43 @@ export default function MockExam() {
 
   const isWarningTime = timeLeft < 300;
 
-  if (isInvalidSession) {
+  if (!examData) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex items-center justify-center p-4 transition-colors duration-200">
-        <Card className="max-w-md w-full border-none shadow-2xl rounded-3xl overflow-hidden bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 animate-in zoom-in-95 duration-200">
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center">
+        <AlertTriangle className="h-12 w-12 text-amber-400 mb-4 animate-bounce" />
+        <h2 className="text-xl font-bold mb-2">Chưa có bài thi nào được chọn</h2>
+        <p className="text-slate-400 text-sm mb-6 max-w-md">Vui lòng chọn môn học và bài thi thực tế từ trang chính để bắt đầu làm bài.</p>
+        <Button onClick={() => navigate('/client/dashboard')} className="font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 py-2.5 shadow-md border-transparent">
+          Quay về Trang chính
+        </Button>
+      </div>
+    );
+  }
+
+  if (isInvalidSession || isDeletedByAdmin) {
+    return (
+      <div className="fixed inset-0 z-[999999] bg-slate-950/98 backdrop-blur-2xl text-white flex flex-col items-center justify-center p-6 text-center select-none pointer-events-auto">
+        <Card className="max-w-md w-full border border-amber-500/40 shadow-2xl rounded-3xl overflow-hidden bg-slate-900 text-slate-100 animate-in zoom-in-95 duration-200">
           <CardContent className="p-8 text-center space-y-6">
-            <div className="w-20 h-20 bg-amber-50 dark:bg-amber-955 border border-amber-200 dark:border-amber-900/50 text-amber-500 dark:text-amber-400 rounded-full flex items-center justify-center mx-auto shadow-sm">
-              <AlertTriangle className="h-10 w-10 animate-bounce text-amber-500" />
+            <div className="w-20 h-20 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-full flex items-center justify-center mx-auto shadow-sm">
+              <AlertTriangle className="h-10 w-10 animate-bounce text-amber-400" />
             </div>
             <div className="space-y-2">
-              <h2 className="text-2xl font-black text-slate-800 dark:text-white">Phiên làm bài không hợp lệ</h2>
-              <p className="text-slate-500 dark:text-slate-400 text-sm font-semibold leading-relaxed">
-                Phiên làm bài này đã kết thúc hoặc không còn hiệu lực. Hệ thống không cho phép quay lại (Back) hoặc truy cập trực tiếp bài thi đã nộp/đã thoát.
-              </p>
+              <h2 className="text-2xl font-black text-white m-0 uppercase tracking-tight">Session không hợp lệ</h2>
+              <div className="inline-block bg-amber-500/20 text-amber-400 font-extrabold text-xs px-3 py-1 rounded-full border border-amber-500/40">
+                Không thể tiếp tục làm bài
+              </div>
             </div>
+            <p className="text-xs text-slate-300 font-medium leading-relaxed bg-slate-950/80 p-4 rounded-2xl border border-slate-800">
+              Session không hợp lệ, vui lòng liên hệ admin để được hỗ trợ
+            </p>
             
             <div className="pt-2">
               <Button 
                 onClick={() => navigate('/client/dashboard')} 
-                className="w-full font-bold h-12 bg-primary hover:bg-primary/90 text-white rounded-xl shadow-md transition duration-150"
+                className="w-full font-bold h-12 bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow-md transition duration-150 border-transparent text-sm"
               >
-                Quay lại Trang chủ
+                Quay lại Trang chính
               </Button>
             </div>
           </CardContent>
