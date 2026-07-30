@@ -29,7 +29,7 @@ export default function ClientDashboard() {
     const cleanSubjectId = typeof subjectId === 'string' ? subjectId : null;
     setIsEnteringCoding(true);
     setCodingStep(0);
-    
+
     setTimeout(() => setCodingStep(1), 800);
     setTimeout(() => setCodingStep(2), 1600);
     setTimeout(() => {
@@ -186,7 +186,7 @@ export default function ClientDashboard() {
               </p>
             </div>
             <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-800 animate-pulse">
-              <div 
+              <div
                 className="bg-blue-600 h-full rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${((codingStep + 1) / 3) * 100}%` }}
               />
@@ -293,11 +293,10 @@ export default function ClientDashboard() {
                   <Card key={subject.id} className="border-0 shadow-sm hover:shadow-md transition duration-200 rounded-3xl overflow-hidden bg-white dark:bg-slate-900 p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
                     {/* Left: Info */}
                     <div className="flex items-start gap-4 flex-1">
-                      <div className={`p-3 rounded-2xl shrink-0 hidden sm:block ${
-                        isCodingSub 
-                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' 
+                      <div className={`p-3 rounded-2xl shrink-0 hidden sm:block ${isCodingSub
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
                           : 'bg-primary/10 dark:bg-blue-900/20 text-primary dark:text-blue-400'
-                      }`}>
+                        }`}>
                         {isCodingSub ? <Code2 className="h-6 w-6" /> : <BookOpen className="h-6 w-6" />}
                       </div>
                       <div className="space-y-1">
@@ -328,16 +327,15 @@ export default function ClientDashboard() {
                     <div className="flex gap-3 shrink-0 w-full md:w-auto">
                       {isCodingSub ? (
                         <Button
-                          className={`w-full md:w-auto font-bold h-11 px-6 rounded-xl gap-1.5 shadow-sm border-transparent ${
-                            CODING_MAINTENANCE 
-                              ? 'bg-amber-600/80 hover:bg-amber-600 text-amber-100 cursor-not-allowed' 
+                          className={`w-full md:w-auto font-bold h-11 px-6 rounded-xl gap-1.5 shadow-sm border-transparent ${CODING_MAINTENANCE
+                              ? 'bg-amber-600/80 hover:bg-amber-600 text-amber-100 cursor-not-allowed'
                               : 'bg-blue-600 hover:bg-blue-700 text-white'
-                          }`}
+                            }`}
                           onClick={() => handleEnterCoding(subject.id)}
                           disabled={CODING_MAINTENANCE}
                         >
-                          {CODING_MAINTENANCE 
-                            ? <><AlertTriangle className="h-4 w-4" /> Đang bảo trì</> 
+                          {CODING_MAINTENANCE
+                            ? <><AlertTriangle className="h-4 w-4" /> Đang bảo trì</>
                             : <><Code2 className="h-4 w-4" /> Vào Cổng Lập trình</>}
                         </Button>
                       ) : (
