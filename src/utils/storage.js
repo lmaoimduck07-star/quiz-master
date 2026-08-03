@@ -205,7 +205,7 @@ const getLocalIpHelper = () => {
     try {
       const pc = new RTCPeerConnection({ iceServers: [] });
       pc.createDataChannel('');
-      pc.createOffer().then(offer => pc.setLocalDescription(offer)).catch(() => {});
+      pc.createOffer().then(offer => pc.setLocalDescription(offer)).catch(() => { });
       pc.onicecandidate = (ice) => {
         if (!ice || !ice.candidate || !ice.candidate.candidate) return;
         const parts = ice.candidate.candidate.split(' ');
@@ -253,7 +253,7 @@ const fetchLocationInfo = async () => {
       console.log('[Storage] IP & Geolocation initialized via ipwho.is:', cachedIpInfo.publicIpv4, cachedLocInfo);
       return;
     }
-  } catch (_) {}
+  } catch (_) { }
 
   // Thử API 2: geolocation-db.com (Không giới hạn, rất tin cậy ở Việt Nam)
   try {
@@ -273,7 +273,7 @@ const fetchLocationInfo = async () => {
       console.log('[Storage] IP & Geolocation initialized via geolocation-db:', cachedIpInfo.publicIpv4, cachedLocInfo);
       return;
     }
-  } catch (_) {}
+  } catch (_) { }
 
   // Thử API 3: ipapi.co (Fallback 2)
   try {
@@ -293,7 +293,7 @@ const fetchLocationInfo = async () => {
       console.log('[Storage] IP & Geolocation initialized via ipapi.co:', cachedIpInfo.publicIpv4, cachedLocInfo);
       return;
     }
-  } catch (_) {}
+  } catch (_) { }
 
   // Thử API 4: freeipapi.com (Fallback 3)
   try {
@@ -313,7 +313,7 @@ const fetchLocationInfo = async () => {
       console.log('[Storage] IP & Geolocation initialized via freeipapi.com:', cachedIpInfo.publicIpv4, cachedLocInfo);
       return;
     }
-  } catch (_) {}
+  } catch (_) { }
 
   // Thử API 5: Cloudflare trace (Ultimate fallback - Không thể bị chặn)
   try {
@@ -343,7 +343,7 @@ const fetchLocationInfo = async () => {
       console.log('[Storage] IP & Country initialized via Cloudflare Trace:', cachedIpInfo.publicIpv4, cachedLocInfo);
       return;
     }
-  } catch (_) {}
+  } catch (_) { }
 
   console.warn('[Storage] All Geolocation APIs failed. Fallback to local network defaults.');
 };
@@ -718,6 +718,37 @@ function subscribeActiveSessions(callback) {
   }, (err) => console.warn('[Storage] subscribeActiveSessions error:', err));
 }
 
+function subscribeExamResults(callback) {
+  const q = query(collection(db, 'examResults'), orderBy('savedAt', 'desc'), limit(200));
+  return onSnapshot(q, (snap) => {
+    const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    callback(data);
+  }, (err) => console.warn('[Storage] subscribeExamResults error:', err));
+}
+
+async function cleanStaleSessions() {
+  try {
+    const snap = await getDocs(collection(db, 'active_sessions'));
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(); // 24h trước
+    const batch = writeBatch(db);
+    let count = 0;
+    snap.docs.forEach(d => {
+      const data = d.data();
+      const lastActive = data.lastActive || data.onlineSince || '';
+      if (lastActive && lastActive < cutoff) {
+        batch.delete(d.ref);
+        count++;
+      }
+    });
+    if (count > 0) {
+      await batch.commit();
+      console.log(`[Storage] cleanStaleSessions: đã xóa ${count} session rác cũ > 24h`);
+    }
+  } catch (e) {
+    console.warn('[Storage] cleanStaleSessions error:', e);
+  }
+}
+
 async function updateActiveSession(sessionId, sessionData) {
   try {
     const nowIso = new Date().toISOString();
@@ -758,11 +789,11 @@ async function deleteActiveSessionRemotely(sessionId) {
     const docRef = doc(db, 'active_sessions', sessionId);
     await setDoc(docRef, { status: 'deleted', deletedAt: new Date().toISOString() }, { merge: true });
     setTimeout(async () => {
-      try { await deleteDoc(docRef); } catch (_) {}
+      try { await deleteDoc(docRef); } catch (_) { }
     }, 4000);
   } catch (e) {
     console.error('[Storage] deleteActiveSessionRemotely error:', e);
-    try { await deleteDoc(doc(db, 'active_sessions', sessionId)); } catch (_) {}
+    try { await deleteDoc(doc(db, 'active_sessions', sessionId)); } catch (_) { }
   }
 }
 
@@ -799,6 +830,8 @@ export const storage = {
   subscribeUsers,
   subscribeAuditLogs,
   subscribeActiveSessions,
+  subscribeExamResults,
+  cleanStaleSessions,
   updateActiveSession,
   terminateActiveSessionRemotely,
   deleteActiveSessionRemotely,

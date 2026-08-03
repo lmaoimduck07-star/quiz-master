@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { storage } from '../utils/storage';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
@@ -58,18 +59,7 @@ export default function ClientDashboard() {
 
 
   // Theme State
-  const [theme, setTheme] = useState(() => localStorage.getItem('qm_theme') || 'light');
-
-  const toggleTheme = () => {
-    const nextTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(nextTheme);
-    localStorage.setItem('qm_theme', nextTheme);
-    if (nextTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
+  const { theme, toggleTheme } = useTheme();
 
 
   const generateVerificationCode = () => {
@@ -294,8 +284,8 @@ export default function ClientDashboard() {
                     {/* Left: Info */}
                     <div className="flex items-start gap-4 flex-1">
                       <div className={`p-3 rounded-2xl shrink-0 hidden sm:block ${isCodingSub
-                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                          : 'bg-primary/10 dark:bg-blue-900/20 text-primary dark:text-blue-400'
+                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                        : 'bg-primary/10 dark:bg-blue-900/20 text-primary dark:text-blue-400'
                         }`}>
                         {isCodingSub ? <Code2 className="h-6 w-6" /> : <BookOpen className="h-6 w-6" />}
                       </div>
@@ -328,8 +318,8 @@ export default function ClientDashboard() {
                       {isCodingSub ? (
                         <Button
                           className={`w-full md:w-auto font-bold h-11 px-6 rounded-xl gap-1.5 shadow-sm border-transparent ${CODING_MAINTENANCE
-                              ? 'bg-amber-600/80 hover:bg-amber-600 text-amber-100 cursor-not-allowed'
-                              : 'bg-blue-600 hover:bg-blue-700 text-white'
+                            ? 'bg-amber-600/80 hover:bg-amber-600 text-amber-100 cursor-not-allowed'
+                            : 'bg-blue-600 hover:bg-blue-700 text-white'
                             }`}
                           onClick={() => handleEnterCoding(subject.id)}
                           disabled={CODING_MAINTENANCE}
@@ -442,16 +432,16 @@ export default function ClientDashboard() {
               </button>
             </div>
             <CardContent className="p-8 space-y-6">
-              <div className="bg-amber-50 dark:bg-amber-955 border border-amber-200 dark:border-amber-900/50 rounded-2xl p-4 text-amber-850 dark:text-amber-300 text-sm leading-relaxed font-semibold">
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-2xl p-4 text-amber-800 dark:text-amber-400/80 text-sm leading-relaxed font-semibold">
                 ⚠️ CẢNH BÁO ANTI-CHEAT: Hệ thống sẽ tự động chuyển sang chế độ TOÀN MÀN HÌNH. Mọi hành vi thoát fullscreen, chuyển tab, mở phần mềm khác hoặc rời tiêu điểm sẽ bị ghi nhận là vi phạm quy chế thi. Đạt 3 lần vi phạm, hệ thống sẽ tự động nộp bài!
               </div>
 
-              <div className="text-slate-600 dark:text-slate-300 text-sm font-semibold">
-                Bạn có chắc chắn muốn tham gia kỳ thi mô phỏng môn <strong className="text-slate-850 dark:text-slate-100">{simSubject.name}</strong> không?
+              <div className="text-slate-600 dark:text-slate-400 text-sm font-semibold">
+                Bạn có chắc chắn muốn tham gia kỳ thi mô phỏng môn <strong className="text-slate-800 dark:text-slate-300">{simSubject.name}</strong> không?
                 Bài thi gồm 50 câu hỏi được trộn ngẫu nhiên và giới hạn thời gian làm bài trong 50 phút.
               </div>
 
-              <div className="flex gap-4 items-center bg-slate-50 dark:bg-slate-800/40 p-4 border border-slate-200 dark:border-slate-800 rounded-2xl">
+              <div className="flex gap-4 items-center bg-slate-50 dark:bg-slate-800/40 p-4 border border-slate-200 dark:border-slate-700/50 rounded-2xl">
                 <div className="flex-1 space-y-1">
                   <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Nhập mã xác nhận</label>
                   <input
@@ -468,12 +458,12 @@ export default function ClientDashboard() {
                         }
                       }
                     }}
-                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-lg font-black tracking-widest text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary text-center"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-2 text-lg font-black tracking-widest text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary text-center"
                   />
                 </div>
-                <div className="text-center bg-slate-900 dark:bg-slate-950 text-white rounded-2xl px-5 py-3 shadow-md border border-slate-800">
+                <div className="text-center bg-slate-800 dark:bg-slate-900 text-white rounded-2xl px-5 py-3 shadow-md border border-slate-700 dark:border-slate-800">
                   <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider font-sans">Mã ngẫu nhiên</div>
-                  <div className="text-2xl font-black tracking-widest text-emerald-400 font-mono select-none">{verificationCode}</div>
+                  <div className="text-2xl font-black tracking-widest text-emerald-400 dark:text-emerald-500 font-mono select-none">{verificationCode}</div>
                 </div>
               </div>
             </CardContent>

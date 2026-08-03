@@ -132,6 +132,7 @@ export default function CodingWorkspace() {
   const isLockOrDeletedRef = useRef(false);
   const [isTerminatedByAdmin, setIsTerminatedByAdmin] = useState(false);
   const [isDeletedByAdmin, setIsDeletedByAdmin] = useState(false);
+  const [adminMessage, setAdminMessage] = useState(null);
   const lastAdminMsgTimeRef = useRef(null);
   const codingSessionId = session ? (`coding_${userId}_${problem.id || 'prob'}`) : null;
 
@@ -168,7 +169,7 @@ export default function CodingWorkspace() {
           storage.removeActiveSession(codingSessionId);
         } else if (mySession.adminMessage && mySession.adminMessageTime !== lastAdminMsgTimeRef.current) {
           lastAdminMsgTimeRef.current = mySession.adminMessageTime;
-          alert(`💬 THÔNG BÁO TỪ GIÁM THỊ:\n"${mySession.adminMessage}"`);
+          setAdminMessage(mySession.adminMessage);
         }
       } else if (hasSeenSessionRef.current && !isLockOrDeletedRef.current) {
         // Session đã từng tồn tại nhưng bị xóa bởi Admin
@@ -612,6 +613,31 @@ export default function CodingWorkspace() {
                 className="rounded-xl font-bold text-xs bg-blue-600 hover:bg-blue-700 text-white px-4 border-transparent"
               >Tạo file</Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Message Modal */}
+      {adminMessage && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-sm w-full p-6 border-2 border-amber-500/50 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-xl">
+                <AlertTriangle className="h-6 w-6 text-amber-500" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white">
+                Thông báo từ Giám thị
+              </h3>
+            </div>
+            <p className="text-slate-600 dark:text-slate-300 mb-6 font-medium leading-relaxed whitespace-pre-wrap">
+              {adminMessage}
+            </p>
+            <button 
+              onClick={() => setAdminMessage(null)}
+              className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-md transition-colors"
+            >
+              Đã hiểu
+            </button>
           </div>
         </div>
       )}

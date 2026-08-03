@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { storage } from '../utils/storage';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
@@ -29,10 +30,17 @@ const markSessionAsExpired = (code) => {
   }
 };
 
+// Chuyển ký tự xuống dòng \n thành <br> để render đúng trong HTML
+const formatQuestionText = (text) => {
+  if (!text) return '';
+  return text.replace(/\n/g, '<br>');
+};
+
 export default function MockExam() {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser } = useAuth();
+  const { theme } = useTheme(); // ensure theme context is consumed so provider syncs documentElement
 
   // Load active session from localStorage if it matches current user and examId
   const savedSession = (() => {
@@ -73,7 +81,7 @@ export default function MockExam() {
   const [showWarning, setShowWarning] = useState(false);
   const [warningText, setWarningText] = useState('');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
-  
+
   const isSubmittedRef = useRef(false);
   const warningCountRef = useRef(savedSession ? savedSession.warningCount : 0);
   const lastWarningTimeRef = useRef(0);
@@ -395,8 +403,8 @@ export default function MockExam() {
       }
       else if (qType === 'fill') {
         correctAnswer = q.answer || '';
-        isCorrect = userAnswer !== undefined && userAnswer !== null && 
-                    userAnswer.toString().trim().toLowerCase() === correctAnswer.toString().trim().toLowerCase();
+        isCorrect = userAnswer !== undefined && userAnswer !== null &&
+          userAnswer.toString().trim().toLowerCase() === correctAnswer.toString().trim().toLowerCase();
       }
       else if (qType === 'truefalse') {
         correctAnswer = q.correct;
@@ -409,7 +417,7 @@ export default function MockExam() {
       }
       else if (qType === 'groupdrag') {
         correctAnswer = q.groups || [];
-        isCorrect = (q.groups || []).every(g => 
+        isCorrect = (q.groups || []).every(g =>
           (g.items || []).every(item => (userAnswer || {})[item] === g.name)
         );
       }
@@ -421,9 +429,9 @@ export default function MockExam() {
       else if (qType === 'order') {
         correctAnswer = q.items || [];
         const userWords = (userAnswer || []).map(idx => q.items[idx]);
-        isCorrect = correctAnswer.length > 0 && 
-                    correctAnswer.length === userWords.length && 
-                    correctAnswer.every((item, idx) => userWords[idx] === item);
+        isCorrect = correctAnswer.length > 0 &&
+          correctAnswer.length === userWords.length &&
+          correctAnswer.every((item, idx) => userWords[idx] === item);
       }
 
       if (isCorrect) correctCount++;
@@ -486,14 +494,14 @@ export default function MockExam() {
     }
 
     // Navigate to review page
-    navigate('/client/review', { 
-      state: { 
-        title, 
-        score, 
-        correctCount, 
+    navigate('/client/review', {
+      state: {
+        title,
+        score,
+        correctCount,
         totalCount: questions.length,
-        questions: reviewedQuestions 
-      } 
+        questions: reviewedQuestions
+      }
     });
   };
 
@@ -535,10 +543,10 @@ export default function MockExam() {
             <p className="text-xs text-slate-300 font-medium leading-relaxed bg-slate-950/80 p-4 rounded-2xl border border-slate-800">
               Session không hợp lệ, vui lòng liên hệ admin để được hỗ trợ
             </p>
-            
+
             <div className="pt-2">
-              <Button 
-                onClick={() => navigate('/client/dashboard')} 
+              <Button
+                onClick={() => navigate('/client/dashboard')}
                 className="w-full font-bold h-12 bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow-md transition duration-150 border-transparent text-sm"
               >
                 Quay lại Trang chính
@@ -577,15 +585,15 @@ export default function MockExam() {
 
   if (screen === 'login') {
     return (
-      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-4">
-        <Card className="max-w-md w-full bg-slate-800 border-slate-700 shadow-2xl rounded-3xl overflow-hidden">
+      <div className="min-h-screen bg-white dark:bg-slate-900 text-slate-900 dark:text-white flex items-center justify-center p-4">
+        <Card className="max-w-md w-full bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-2xl rounded-3xl overflow-hidden">
           <CardContent className="p-8 text-center space-y-6">
-            <div className="w-16 h-16 bg-blue-900/50 text-blue-400 rounded-full flex items-center justify-center mx-auto border border-blue-700/50 shadow-inner">
+            <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/50 text-blue-500 dark:text-blue-400 rounded-full flex items-center justify-center mx-auto border border-blue-200 dark:border-blue-700/50 shadow-inner">
               <Lock className="h-8 w-8" />
             </div>
             <div>
-              <h2 className="text-2xl font-black text-white mb-1">Mật khẩu bảo vệ</h2>
-              <p className="text-slate-400 text-xs font-semibold">Bài thi này yêu cầu nhập mật khẩu để truy cập</p>
+              <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-1">Mật khẩu bảo vệ</h2>
+              <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold">Bài thi này yêu cầu nhập mật khẩu để truy cập</p>
             </div>
             <form onSubmit={handlePasswordSubmit} className="space-y-4">
               <input
@@ -593,17 +601,17 @@ export default function MockExam() {
                 value={passwordInput}
                 onChange={(e) => setPasswordInput(e.target.value)}
                 placeholder="Nhập mật khẩu bài thi..."
-                className="w-full p-4 bg-slate-900 border-2 border-slate-700 rounded-xl text-center text-lg font-bold outline-none focus:border-blue-500 transition-colors"
+                className="w-full p-4 bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl text-center text-lg font-bold outline-none focus:border-blue-500 transition-colors text-slate-900 dark:text-white"
                 autoFocus
               />
               {passwordError && (
-                <p className="text-red-400 text-xs font-bold animate-shake">⚠️ Mật khẩu không chính xác. Vui lòng thử lại!</p>
+                <p className="text-red-500 dark:text-red-400 text-xs font-bold animate-shake">⚠️ Mật khẩu không chính xác. Vui lòng thử lại!</p>
               )}
               <Button type="submit" className="w-full font-bold h-12 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-lg transition">
                 Xác nhận & Bắt đầu thi
               </Button>
             </form>
-            <button onClick={() => navigate('/client/dashboard')} className="text-slate-400 text-xs font-bold hover:underline">
+            <button onClick={() => navigate('/client/dashboard')} className="text-slate-500 dark:text-slate-400 text-xs font-bold hover:underline">
               Quay lại Trang chủ
             </button>
           </CardContent>
@@ -614,30 +622,30 @@ export default function MockExam() {
 
   if (screen === 'start') {
     return (
-      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-4">
-        <Card className="max-w-xl w-full bg-slate-800 border-slate-700 shadow-2xl rounded-3xl overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="min-h-screen bg-white dark:bg-slate-900 text-slate-900 dark:text-white flex items-center justify-center p-4">
+        <Card className="max-w-xl w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-2xl rounded-3xl overflow-hidden animate-in zoom-in-95 duration-200">
           <CardContent className="p-8 md:p-10 text-center space-y-6">
             <div className="text-6xl mb-2">📝</div>
             <div>
-              <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Môn học: {subjectName || 'Bài thi tổng hợp'}</span>
-              <h2 className="text-2xl md:text-3xl font-black text-white mt-1 mb-2">{title}</h2>
-              <p className="text-slate-400 text-sm font-semibold">Sẵn sàng để bắt đầu bài làm thi thực tế</p>
+              <span className="text-xs font-bold text-blue-500 dark:text-blue-400 uppercase tracking-widest">Môn học: {subjectName || 'Bài thi tổng hợp'}</span>
+              <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mt-1 mb-2">{title}</h2>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-semibold">Sẵn sàng để bắt đầu bài làm thi thực tế</p>
             </div>
 
-            <div className="flex justify-center gap-4 text-slate-300 font-bold text-sm">
-              <div className="bg-slate-900/80 px-5 py-3 rounded-2xl border border-slate-700 flex items-center gap-2 shadow-inner">
-                <Clock className="h-5 w-5 text-blue-400" />
+            <div className="flex justify-center gap-4 text-slate-600 dark:text-slate-300 font-bold text-sm">
+              <div className="bg-slate-100 dark:bg-slate-900/80 px-5 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center gap-2 shadow-inner">
+                <Clock className="h-5 w-5 text-blue-500 dark:text-blue-400" />
                 <span>{Math.floor(timeLimit / 60)} Phút</span>
               </div>
-              <div className="bg-slate-900/80 px-5 py-3 rounded-2xl border border-slate-700 flex items-center gap-2 shadow-inner">
-                <span className="text-blue-400 text-base font-black">❓</span>
+              <div className="bg-slate-100 dark:bg-slate-900/80 px-5 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center gap-2 shadow-inner">
+                <span className="text-blue-500 dark:text-blue-400 text-base font-black">❓</span>
                 <span>{questions.length} Câu hỏi</span>
               </div>
             </div>
 
             {mode === 'simulation' && (
-              <div className="bg-amber-950/40 border-2 border-dashed border-amber-500/50 p-4 rounded-2xl text-amber-300 text-xs font-bold flex items-center gap-3 text-left shadow-sm">
-                <ShieldAlert className="h-6 w-6 text-amber-400 shrink-0" />
+              <div className="bg-amber-50 dark:bg-amber-950/40 border-2 border-dashed border-amber-400 dark:border-amber-500/50 p-4 rounded-2xl text-amber-700 dark:text-amber-300 text-xs font-bold flex items-center gap-3 text-left shadow-sm">
+                <ShieldAlert className="h-6 w-6 text-amber-500 dark:text-amber-400 shrink-0" />
                 <span>
                   <strong>Chế độ giám sát:</strong> Hệ thống sẽ tự động giám sát vi phạm và tự động nộp bài nếu bạn rời tiêu điểm cửa sổ thi hoặc thoát toàn màn hình 3 lần.
                 </span>
@@ -651,7 +659,7 @@ export default function MockExam() {
               BẮT ĐẦU THI NGAY 🚀
             </Button>
 
-            <button onClick={() => navigate('/client/dashboard')} className="text-slate-400 text-xs font-bold hover:underline">
+            <button onClick={() => navigate('/client/dashboard')} className="text-slate-400 dark:text-slate-400 text-xs font-bold hover:underline">
               Quay lại Trang chủ
             </button>
           </CardContent>
@@ -664,7 +672,7 @@ export default function MockExam() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-200">
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 flex items-center justify-between sticky top-0 z-20 shadow-sm transition-colors">
         <div className="flex flex-col">
-          <span className="text-xs font-bold text-slate-400 dark:text-slate-550 uppercase tracking-wider">Môn học: {subjectName}</span>
+          <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Môn học: {subjectName}</span>
           <span className="font-extrabold text-slate-800 dark:text-white text-base">{title}</span>
         </div>
         <div className={`flex items-center gap-2 text-2xl font-black ${isWarningTime ? 'text-red-500 animate-pulse' : 'text-primary dark:text-blue-400'}`}>
@@ -687,7 +695,7 @@ export default function MockExam() {
                 const isAnswered = answers[qNum] !== undefined && answers[qNum] !== '' && (Array.isArray(answers[qNum]) ? answers[qNum].length > 0 : true);
                 const isCurrent = currentQuestion === qNum;
                 const isFlagged = flagged.includes(qNum);
-                
+
                 let btnClass = "h-10 w-10 rounded-xl font-bold text-xs transition-all border flex items-center justify-center relative ";
                 if (isFlagged) {
                   btnClass += "bg-red-500 text-white border-red-600 shadow-md shadow-red-500/20 font-black ";
@@ -700,8 +708,8 @@ export default function MockExam() {
                 }
 
                 return (
-                  <button 
-                    key={qNum} 
+                  <button
+                    key={qNum}
                     className={btnClass}
                     onClick={() => setCurrentQuestion(qNum)}
                   >
@@ -741,21 +749,20 @@ export default function MockExam() {
                 <button
                   type="button"
                   onClick={() => toggleFlag(currentQuestion)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                    flagged.includes(currentQuestion)
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition ${flagged.includes(currentQuestion)
                       ? 'bg-red-500 text-white shadow-sm'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-500'
-                  }`}
+                    }`}
                 >
                   <Flag className="h-3.5 w-3.5" />
                   {flagged.includes(currentQuestion) ? 'Đã cắm cờ 🚩' : 'Cần xem lại 🚩'}
                 </button>
               </div>
 
-              <h2 className="text-lg md:text-xl font-bold text-slate-800 dark:text-slate-150 mb-8 leading-relaxed">
-                <span dangerouslySetInnerHTML={{ __html: questions[currentQuestion - 1]?.content || questions[currentQuestion - 1]?.question || '' }} />
+              <h2 className="text-lg md:text-xl font-bold text-slate-800 dark:text-slate-100 mb-8 leading-relaxed">
+                <span dangerouslySetInnerHTML={{ __html: formatQuestionText(questions[currentQuestion - 1]?.content || questions[currentQuestion - 1]?.question || '') }} />
               </h2>
-              
+
               {questions[currentQuestion - 1]?.image && (
                 <img src={questions[currentQuestion - 1]?.image} alt="Question Graphic" className="max-w-full max-h-64 rounded-xl border border-slate-200 dark:border-slate-800 mb-6 mx-auto block shadow-sm" />
               )}
@@ -769,13 +776,13 @@ export default function MockExam() {
                     return (q.options || []).map((opt, i) => {
                       const optImg = (q.optionImages && q.optionImages[i]) ? q.optionImages[i] : null;
                       return (
-                        <label 
-                          key={i} 
+                        <label
+                          key={i}
                           className={`flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition ${answers[currentQuestion] === i ? 'border-primary bg-primary/5 dark:border-blue-500 dark:bg-blue-500/10' : 'border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700'}`}
                         >
-                          <input 
-                            type="radio" 
-                            name={`question-${currentQuestion}`} 
+                          <input
+                            type="radio"
+                            name={`question-${currentQuestion}`}
                             className="w-5 h-5 text-primary dark:text-blue-500 border-slate-300 dark:border-slate-700 focus:ring-primary dark:focus:ring-blue-500 flex-shrink-0 mt-0.5"
                             checked={answers[currentQuestion] === i}
                             onChange={() => setAnswers(prev => ({ ...prev, [currentQuestion]: i }))}
@@ -783,7 +790,7 @@ export default function MockExam() {
                           <div className="flex flex-col flex-1">
                             <span className="text-sm font-semibold text-slate-700 dark:text-slate-300" dangerouslySetInnerHTML={{ __html: opt || '' }} />
                             {optImg && (
-                              <img src={optImg} alt={`Option ${i+1}`} className="mt-2 max-h-40 rounded-lg border border-slate-200 dark:border-slate-800 object-contain shadow-sm" />
+                              <img src={optImg} alt={`Option ${i + 1}`} className="mt-2 max-h-40 rounded-lg border border-slate-200 dark:border-slate-800 object-contain shadow-sm" />
                             )}
                           </div>
                         </label>
@@ -797,18 +804,18 @@ export default function MockExam() {
                       const isChecked = currentAnswers.includes(i);
                       const optImg = (q.optionImages && q.optionImages[i]) ? q.optionImages[i] : null;
                       return (
-                        <label 
-                          key={i} 
+                        <label
+                          key={i}
                           className={`flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition ${isChecked ? 'border-primary bg-primary/5 dark:border-blue-500 dark:bg-blue-500/10' : 'border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700'}`}
                         >
-                          <input 
-                            type="checkbox" 
-                            name={`question-${currentQuestion}`} 
+                          <input
+                            type="checkbox"
+                            name={`question-${currentQuestion}`}
                             className="w-5 h-5 text-primary dark:text-blue-500 border-slate-300 dark:border-slate-700 focus:ring-primary dark:focus:ring-blue-500 rounded flex-shrink-0 mt-0.5"
                             checked={isChecked}
                             onChange={() => {
-                              const nextAnswers = isChecked 
-                                ? currentAnswers.filter(x => x !== i) 
+                              const nextAnswers = isChecked
+                                ? currentAnswers.filter(x => x !== i)
                                 : [...currentAnswers, i];
                               setAnswers(prev => ({ ...prev, [currentQuestion]: nextAnswers }));
                             }}
@@ -816,7 +823,7 @@ export default function MockExam() {
                           <div className="flex flex-col flex-1">
                             <span className="text-sm font-semibold text-slate-700 dark:text-slate-300" dangerouslySetInnerHTML={{ __html: opt || '' }} />
                             {optImg && (
-                              <img src={optImg} alt={`Option ${i+1}`} className="mt-2 max-h-40 rounded-lg border border-slate-200 dark:border-slate-800 object-contain shadow-sm" />
+                              <img src={optImg} alt={`Option ${i + 1}`} className="mt-2 max-h-40 rounded-lg border border-slate-200 dark:border-slate-800 object-contain shadow-sm" />
                             )}
                           </div>
                         </label>
@@ -826,9 +833,9 @@ export default function MockExam() {
 
                   if (qType === 'fill') {
                     return (
-                      <input 
+                      <input
                         type="text"
-                        className="w-full p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-800 focus:border-primary dark:focus:border-blue-500 focus:outline-none font-semibold text-slate-700 dark:text-slate-250 bg-white dark:bg-slate-950 transition-colors"
+                        className="w-full p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-800 focus:border-primary dark:focus:border-blue-500 focus:outline-none font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-950 transition-colors"
                         placeholder="Nhập câu trả lời của bạn..."
                         value={answers[currentQuestion] || ''}
                         onChange={(e) => setAnswers(prev => ({ ...prev, [currentQuestion]: e.target.value }))}
@@ -840,13 +847,13 @@ export default function MockExam() {
                     return (
                       <div className="flex gap-4">
                         {[true, false].map((val) => (
-                          <label 
+                          <label
                             key={val ? 'true' : 'false'}
                             className={`flex-1 flex items-center justify-center gap-3 p-4 rounded-2xl border-2 cursor-pointer transition ${answers[currentQuestion] === val ? 'border-primary bg-primary/5 dark:border-blue-500 dark:bg-blue-500/10' : 'border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700'}`}
                           >
-                            <input 
-                              type="radio" 
-                              name={`question-${currentQuestion}`} 
+                            <input
+                              type="radio"
+                              name={`question-${currentQuestion}`}
                               className="w-5 h-5 text-primary dark:text-blue-500 border-slate-300 dark:border-slate-700 focus:ring-primary dark:focus:ring-blue-500 flex-shrink-0"
                               checked={answers[currentQuestion] === val}
                               onChange={() => setAnswers(prev => ({ ...prev, [currentQuestion]: val }))}
@@ -887,7 +894,7 @@ export default function MockExam() {
                     return (
                       <div className="space-y-6">
                         {/* Ngân hàng từ khóa vế phải */}
-                        <div 
+                        <div
                           onDragOver={(e) => e.preventDefault()}
                           onDrop={(e) => {
                             e.preventDefault();
@@ -929,21 +936,20 @@ export default function MockExam() {
                                   {p.left}
                                 </div>
 
-                                <div 
+                                <div
                                   onDragOver={(e) => e.preventDefault()}
                                   onDrop={(e) => {
                                     e.preventDefault();
                                     const draggedText = e.dataTransfer.getData('text/plain');
                                     handleDropToPair(p.left, draggedText);
                                   }}
-                                  className={`flex-1 border-2 border-dashed rounded-2xl p-2.5 flex items-center justify-start min-h-[54px] transition ${
-                                    assignedVal 
-                                      ? 'border-amber-400 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30' 
-                                      : 'border-slate-300 dark:border-slate-750 bg-slate-50 dark:bg-slate-950'
-                                  }`}
+                                  className={`flex-1 border-2 border-dashed rounded-2xl p-2.5 flex items-center justify-start min-h-[54px] transition ${assignedVal
+                                      ? 'border-amber-400 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30'
+                                      : 'border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950'
+                                    }`}
                                 >
                                   {assignedVal ? (
-                                    <div 
+                                    <div
                                       draggable
                                       onDoubleClick={() => handleRemoveFromPair(p.left)}
                                       onDragStart={(e) => e.dataTransfer.setData('text/plain', assignedVal)}
@@ -994,7 +1000,7 @@ export default function MockExam() {
                     return (
                       <div className="space-y-6">
                         {/* Ngân hàng từ khóa tổng */}
-                        <div 
+                        <div
                           onDragOver={(e) => e.preventDefault()}
                           onDrop={(e) => {
                             e.preventDefault();
@@ -1123,21 +1129,20 @@ export default function MockExam() {
                             return (
                               <span key={idx} className="inline-block mx-1">
                                 <span dangerouslySetInnerHTML={{ __html: part }} />
-                                <span 
+                                <span
                                   onDragOver={(e) => e.preventDefault()}
                                   onDrop={(e) => {
                                     e.preventDefault();
                                     const text = e.dataTransfer.getData('text/plain');
                                     if (text) handleFillBlank(idx, text);
                                   }}
-                                  className={`inline-flex items-center gap-1 border-2 border-dashed rounded-lg px-2 py-0.5 align-middle transition ${
-                                    filledVal 
-                                      ? 'border-indigo-500 bg-indigo-50 dark:bg-blue-950 text-indigo-700 dark:text-blue-300 font-bold' 
+                                  className={`inline-flex items-center gap-1 border-2 border-dashed rounded-lg px-2 py-0.5 align-middle transition ${filledVal
+                                      ? 'border-indigo-500 bg-indigo-50 dark:bg-blue-950 text-indigo-700 dark:text-blue-300 font-bold'
                                       : 'border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-400'
-                                  }`}
+                                    }`}
                                 >
                                   {filledVal ? (
-                                    <span 
+                                    <span
                                       draggable
                                       onDoubleClick={() => handleFillBlank(idx, '')}
                                       onDragStart={(e) => e.dataTransfer.setData('text/plain', filledVal)}
@@ -1215,7 +1220,7 @@ export default function MockExam() {
                                   key={idx}
                                   type="button"
                                   onClick={() => handleAddWord(idx)}
-                                  className="bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-350 font-semibold px-4 py-2 rounded-2xl text-sm shadow-sm transition hover:-translate-y-0.5 duration-100"
+                                  className="bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold px-4 py-2 rounded-2xl text-sm shadow-sm transition hover:-translate-y-0.5 duration-100"
                                 >
                                   {q.items[idx]}
                                 </button>
@@ -1234,8 +1239,8 @@ export default function MockExam() {
               </div>
 
               <div className="mt-10 flex justify-between border-t border-slate-100 dark:border-slate-800 pt-6">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   disabled={currentQuestion === 1}
                   onClick={() => setCurrentQuestion(prev => prev - 1)}
                   className="rounded-xl font-bold h-11 border-slate-200 dark:border-slate-800 bg-transparent"
@@ -1245,7 +1250,7 @@ export default function MockExam() {
                 <span className="text-slate-400 font-bold text-sm self-center">
                   {currentQuestion} / {questions.length}
                 </span>
-                <Button 
+                <Button
                   disabled={currentQuestion === questions.length}
                   onClick={() => setCurrentQuestion(prev => prev + 1)}
                   className="rounded-xl font-bold h-11"
@@ -1264,7 +1269,7 @@ export default function MockExam() {
             <CardContent className="p-8 text-center space-y-4">
               <AlertTriangle className="h-16 w-16 text-red-500 mx-auto animate-bounce" />
               <h2 className="text-2xl font-black text-red-600 dark:text-red-400">CẢNH BÁO VI PHẠM ({warningCount}/3)</h2>
-              <p className="text-slate-600 dark:text-slate-350 font-medium text-sm">
+              <p className="text-slate-600 dark:text-slate-400 font-medium text-sm">
                 Bạn vừa vi phạm quy chế thi: <strong className="text-slate-800 dark:text-slate-100">{warningText}</strong>.
               </p>
               <p className="text-xs text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/30 p-3 rounded-xl border border-amber-100 dark:border-amber-900/30">
@@ -1286,9 +1291,9 @@ export default function MockExam() {
               <p className="text-slate-500 dark:text-slate-450 text-sm font-semibold">
                 Bạn có chắc chắn muốn nộp bài thi ngay bây giờ không? Bạn sẽ không thể sửa đổi câu trả lời của mình nữa.
               </p>
-              
+
               <div className="flex gap-3 justify-center pt-4">
-                <Button variant="outline" onClick={() => setShowSubmitModal(false)} className="w-full font-bold h-11 rounded-xl border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-350 bg-transparent">
+                <Button variant="outline" onClick={() => setShowSubmitModal(false)} className="w-full font-bold h-11 rounded-xl border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 bg-transparent">
                   Tiếp tục làm bài
                 </Button>
                 <Button variant="danger" onClick={() => {

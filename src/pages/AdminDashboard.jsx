@@ -15,6 +15,7 @@ import SystemSettingsManager from '../components/settings/SystemSettingsManager'
 import LiveMonitor from '../components/admin/LiveMonitor';
 import { storage } from '../utils/storage';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -22,18 +23,7 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('live_monitor'); // Mặc định mở Live Monitor hoặc 'subjects'
 
   // Theme State
-  const [theme, setTheme] = useState(() => localStorage.getItem('qm_theme') || 'light');
-
-  const toggleTheme = () => {
-    const nextTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(nextTheme);
-    localStorage.setItem('qm_theme', nextTheme);
-    if (nextTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
+  const { theme, toggleTheme } = useTheme();
 
   // Load & Lắng nghe dữ liệu Firestore Realtime
   const [subjects, setSubjects] = useState([]);
@@ -135,64 +125,54 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex transition-colors duration-200">
       {/* Sidebar */}
       {editingExamId === null && (
-        <div className="w-64 bg-slate-900 text-slate-300 flex flex-col hidden md:flex fixed top-0 bottom-0 left-0 z-30">
-          <div className="p-6">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <LayoutDashboard className="h-6 w-6 text-primary" /> Admin Panel
+        <div className="w-64 bg-slate-900 text-slate-300 flex flex-col hidden md:flex fixed top-0 bottom-0 left-0 z-30 border-r border-slate-800">
+          {/* Logo */}
+          <div className="p-6 border-b border-slate-800">
+            <h2 className="text-xl font-black flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0">
+                <LayoutDashboard className="h-4 w-4 text-white" />
+              </div>
+              <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">Admin Panel</span>
             </h2>
           </div>
-          <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto">
-            <button
-              onClick={() => setActiveTab('live_monitor')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md font-medium transition-colors ${activeTab === 'live_monitor' ? 'bg-primary text-white' : 'hover:bg-slate-800 hover:text-white'}`}
-            >
-              <span className="flex items-center gap-3">
-                <Activity className="h-5 w-5 text-emerald-400" /> Live Monitor
-              </span>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-            </button>
+          <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto">
+            {[
+              { tab: 'live_monitor', icon: <Activity className="h-5 w-5" />, label: 'Live Monitor', badge: <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" /> },
+              { tab: 'subjects', icon: <BookOpen className="h-5 w-5" />, label: 'Quản lý môn học' },
+              { tab: 'users', icon: <Users className="h-5 w-5" />, label: 'Quản lý tài khoản' },
+              { tab: 'audit', icon: <Activity className="h-5 w-5" />, label: 'Audit Log' },
+              { tab: 'settings', icon: <Settings className="h-5 w-5" />, label: 'Cấu hình hệ thống' },
+            ].map(({ tab, icon, label, badge }) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition-all duration-150 text-sm ${activeTab === tab
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-900/30'
+                    : 'hover:bg-slate-800 hover:text-white text-slate-400'
+                  }`}
+              >
+                <span className="flex items-center gap-3">{icon} {label}</span>
+                {badge}
+              </button>
+            ))}
 
-            <button
-              onClick={() => setActiveTab('subjects')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${activeTab === 'subjects' ? 'bg-primary text-white' : 'hover:bg-slate-800 hover:text-white'}`}
-            >
-              <BookOpen className="h-5 w-5" /> Quản lý môn học
-            </button>
-
-
-            <button
-              onClick={() => setActiveTab('users')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${activeTab === 'users' ? 'bg-primary text-white' : 'hover:bg-slate-800 hover:text-white'}`}
-            >
-              <Users className="h-5 w-5" /> Quản lý tài khoản
-            </button>
-            <button
-              onClick={() => setActiveTab('audit')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${activeTab === 'audit' ? 'bg-primary text-white' : 'hover:bg-slate-800 hover:text-white'}`}
-            >
-              <Activity className="h-5 w-5" /> Audit Log
-            </button>
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors ${activeTab === 'settings' ? 'bg-primary text-white' : 'hover:bg-slate-800 hover:text-white'}`}
-            >
-              <Settings className="h-5 w-5" /> Cấu hình hệ thống
-            </button>
-
-            <div className="h-px bg-slate-800 my-4" />
+            <div className="h-px bg-slate-800 my-3" />
 
             <button
               onClick={handleExportData}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-md font-medium transition-colors hover:bg-slate-800 hover:text-white text-slate-400 text-sm"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-colors hover:bg-slate-800 hover:text-white text-slate-500 text-sm"
               title="Tải về bản sao lưu dữ liệu hệ thống"
             >
-              <Upload className="h-5 w-5 rotate-180 text-slate-500" /> Sao lưu dữ liệu
+              <Upload className="h-5 w-5 rotate-180" /> Sao lưu dữ liệu
             </button>
           </nav>
           <div className="p-4 border-t border-slate-800">
-            <Button variant="ghost" className="w-full justify-start text-red-400 hover:text-red-300 hover:bg-slate-800 bg-transparent" onClick={handleLogout}>
-              <LogOut className="mr-3 h-5 w-5" /> Đăng xuất
-            </Button>
+            <button
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-red-400 hover:text-red-300 hover:bg-slate-800 transition-colors text-sm"
+              onClick={handleLogout}
+            >
+              <LogOut className="h-5 w-5" /> Đăng xuất
+            </button>
           </div>
         </div>
       )}
@@ -202,34 +182,28 @@ export default function AdminDashboard() {
         {editingExamId === null && (
           <header className="sticky top-0 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 p-4 flex justify-between md:justify-end items-center transition-colors shadow-sm">
             <div className="md:hidden">
-              <h2 className="text-lg font-black text-primary dark:text-blue-500 flex items-center gap-1.5 m-0">
-                <LayoutDashboard className="h-5 w-5" /> Admin Panel
+              <h2 className="text-lg font-black bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent flex items-center gap-1.5 m-0">
+                <LayoutDashboard className="h-5 w-5 text-blue-600" /> Admin Panel
               </h2>
             </div>
-            <div className="flex items-center gap-4">
-              {/* Nút chuyển sang giao diện Học sinh */}
-              <Button
-                variant="outline"
+            <div className="flex items-center gap-3">
+              <button
                 onClick={() => navigate('/client/dashboard')}
-                className="font-bold text-xs h-9 px-4 rounded-xl border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-350 hover:bg-slate-100 dark:hover:bg-slate-800 bg-transparent flex items-center gap-1.5 animate-none"
+                className="font-bold text-xs h-9 px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 bg-white dark:bg-transparent flex items-center gap-1.5 transition-colors"
                 title="Chuyển sang giao diện Học sinh"
               >
                 <Users className="h-4 w-4" /> Giao diện Học sinh
-              </Button>
-
-              {/* Theme Toggle */}
-              <Button
-                variant="ghost"
-                size="icon"
+              </button>
+              <button
                 onClick={toggleTheme}
-                className="text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 h-9 w-9 rounded-xl border-transparent bg-transparent"
+                className="text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 h-9 w-9 rounded-xl flex items-center justify-center transition-colors"
                 title={theme === 'light' ? 'Chế độ tối' : 'Chế độ sáng'}
               >
                 {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5 text-yellow-400" />}
-              </Button>
+              </button>
               <div className="flex items-center gap-3">
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{currentUser?.fullName || 'Admin'}</span>
-                <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center text-white font-bold">
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 hidden sm:block">{currentUser?.fullName || 'Admin'}</span>
+                <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
                   {(currentUser?.fullName || 'A').charAt(0).toUpperCase()}
                 </div>
               </div>
@@ -363,23 +337,23 @@ export default function AdminDashboard() {
                 onUpdateUser={(updated) => {
                   const oldUser = users.find(u => u.id === updated.id);
                   setUsers(users.map(u => u.id === updated.id ? updated : u));
-                  
+
                   // So sánh sự khác biệt của permissions nếu có
                   const oldPerm = oldUser?.permissions || {};
                   const newPerm = updated.permissions || {};
                   const permDiffs = [];
-                  
+
                   if (oldPerm.codingAccess !== newPerm.codingAccess) {
                     permDiffs.push(`Coding & Vấn đáp: ${oldPerm.codingAccess ? 'Có' : 'Không'} -> ${newPerm.codingAccess ? 'Có' : 'Không'}`);
                   }
-                  
+
                   const diffText = permDiffs.length > 0 ? ` (Thay đổi quyền: ${permDiffs.join(', ')})` : '';
                   const payload = {
                     oldUser: oldUser ? { ...oldUser, password: '***' } : null,
                     newUser: { ...updated, password: '***' },
                     changes: permDiffs
                   };
-                  
+
                   addLog('Manager', `Cập nhật tài khoản: ${updated.username}${diffText}`, 'Info', payload);
                 }}
                 onDeleteUser={(id) => {

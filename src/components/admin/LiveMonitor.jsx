@@ -467,7 +467,7 @@ export default function LiveMonitor() {
           )}
           <span className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-900/40">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-            🔴 Realtime Sync Active
+            Realtime Sync Active
           </span>
         </div>
       </div>

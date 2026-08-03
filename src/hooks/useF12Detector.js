@@ -97,28 +97,39 @@ export function useF12Detector({ currentUser, onLocked, enabled = true }) {
   useEffect(() => {
     if (!enabled || !currentUser) return;
 
-    // 1. Detect phím F12
+    // 1. Chặn phím tắt (Function keys & DevTools shortcuts)
     const handleKeyDown = (e) => {
-      if (e.key === 'F12') {
+      // Nhận diện phím Function (F1 -> F12)
+      // e.code của các phím này thường là 'F1', 'F2', ..., 'F12'
+      const isFunctionKey = e.code && e.code.startsWith('F') && e.code.length > 1 && !isNaN(e.code.slice(1));
+
+      // Ctrl+Shift+I / J / C (Chrome/Edge DevTools Windows)
+      const isDevToolsShortcut = e.ctrlKey && e.shiftKey && 
+        (e.code === 'KeyI' || e.code === 'KeyJ' || e.code === 'KeyC');
+      
+      // Ctrl+U (View Source)
+      const isViewSourceShortcut = e.ctrlKey && e.code === 'KeyU';
+
+      if (isFunctionKey || isDevToolsShortcut || isViewSourceShortcut) {
         e.preventDefault();
-        handleViolation();
-      }
-      // Ctrl+Shift+I / Ctrl+Shift+J / Ctrl+Shift+C (Chrome DevTools shortcuts)
-      if (
-        (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' ||
-                                      e.key === 'J' || e.key === 'j' ||
-                                      e.key === 'C' || e.key === 'c')) ||
-        (e.ctrlKey && (e.key === 'U' || e.key === 'u')) // View source
-      ) {
-        e.preventDefault();
+        e.stopPropagation();
         handleViolation();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    // 2. Chặn chuột phải (Context menu)
+    const handleContextMenu = (e) => {
+      e.preventDefault();
+      // Yêu cầu: CHỈ CHẶN, KHÔNG TÍNH VI PHẠM (tránh ấn nhầm)
+    };
+
+    // Sử dụng capture: true để bắt sự kiện trước khi bị các phần tử khác chặn (stopPropagation)
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    window.addEventListener('contextmenu', handleContextMenu, { capture: true });
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+      window.removeEventListener('contextmenu', handleContextMenu, { capture: true });
     };
   }, [enabled, currentUser, handleViolation]);
 

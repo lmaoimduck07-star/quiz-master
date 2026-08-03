@@ -1,6 +1,7 @@
 import React, { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import PrivateRoute from "./components/PrivateRoute";
 
 // Lazy-loaded pages
@@ -27,6 +28,7 @@ function PageLoader() {
 
 function App() {
   return (
+    <ThemeProvider>
     <AuthProvider>
       <BrowserRouter>
         <Suspense fallback={<PageLoader />}>
@@ -103,6 +105,7 @@ function App() {
         </Suspense>
       </BrowserRouter>
     </AuthProvider>
+    </ThemeProvider>
   );
 }
 

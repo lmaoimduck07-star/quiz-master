@@ -69,7 +69,7 @@ export default function ExamEditor({ subject, examId, onBack, onSaveExam }) {
   const totalWeight = questions.reduce((sum, q) => sum + (parseFloat(q.points) || 1), 0);
 
   return (
-    <div className="bg-slate-50 min-h-screen pt-24 pb-20">
+    <div className="bg-slate-50 dark:bg-slate-950 min-h-screen pt-24 pb-20">
       
       {/* THANH CÔNG CỤ TRÊN CÙNG */}
       <Taskbar 
@@ -85,15 +85,15 @@ export default function ExamEditor({ subject, examId, onBack, onSaveExam }) {
         <QuestionForms onAddQuestion={handleAddQuestion} />
 
         {/* DANH SÁCH CÂU HỎI TRONG ĐỀ */}
-        <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
           
-          <div className="flex justify-between items-start mb-8 pb-6 border-b border-slate-100">
+          <div className="flex justify-between items-start mb-8 pb-6 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-4">
               <div className="bg-primary/10 p-3 rounded-xl text-primary">
                 <FileText className="h-8 w-8" />
               </div>
               <div>
-                <h2 className="text-2xl font-black text-slate-800 m-0 mb-2">Câu Hỏi Trong Đề ({questions.length})</h2>
+                <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 m-0 mb-2">Câu Hỏi Trong Đề ({questions.length})</h2>
                 
                 {/* NHÓM NÚT IMPORT */}
                 <div className="flex gap-2">
@@ -111,15 +111,15 @@ export default function ExamEditor({ subject, examId, onBack, onSaveExam }) {
             </div>
 
             <div className="flex flex-col items-end gap-3">
-              <div className="bg-blue-50 border border-blue-200 px-6 py-2 rounded-xl text-center min-w-[200px]">
-                <div className="text-xs font-bold text-blue-500 tracking-wider mb-1">TỔNG ĐIỂM CỦA ĐỀ</div>
-                <div className="text-3xl font-black text-blue-900">10 Điểm</div>
-                <div className="text-xs text-blue-400">Tổng trọng số: {totalWeight}</div>
+              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 px-6 py-2 rounded-xl text-center min-w-[200px]">
+                <div className="text-xs font-bold text-blue-500 dark:text-blue-400 tracking-wider mb-1">TỔNG ĐIỂM CỦA ĐỀ</div>
+                <div className="text-3xl font-black text-blue-900 dark:text-blue-200">10 Điểm</div>
+                <div className="text-xs text-blue-400 dark:text-blue-500">Tổng trọng số: {totalWeight}</div>
               </div>
               <Button 
                 variant="outline"
                 onClick={() => { if(confirm("Xóa sạch toàn bộ câu hỏi?")) setQuestions([]) }}
-                className="text-red-500 bg-white border-red-200 hover:bg-red-50 hover:text-red-600 font-semibold py-1.5 px-4 rounded-lg text-sm transition flex items-center gap-2 h-auto"
+                className="text-red-500 bg-white dark:bg-slate-800 border-red-200 dark:border-red-800/50 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 font-semibold py-1.5 px-4 rounded-lg text-sm transition flex items-center gap-2 h-auto"
               >
                 <Trash2 className="h-4 w-4" /> Xóa sạch danh sách
               </Button>

@@ -370,20 +370,20 @@ export default function QuestionForms({ onAddQuestion }) {
   ];
 
   return (
-    <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm mb-8">
+    <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm mb-8">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2 m-0"><HelpCircle className="h-8 w-8 text-indigo-500" /> Thêm Câu Hỏi Mới</h2>
-        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 px-4 py-2 rounded-xl">
-          <label className="font-bold text-amber-700 text-sm uppercase tracking-wide">Trọng số:</label>
-          <input type="number" min="1" step="1" className="w-16 p-1 text-center font-bold border border-amber-300 rounded outline-none"
+        <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 m-0"><HelpCircle className="h-8 w-8 text-indigo-500" /> Thêm Câu Hỏi Mới</h2>
+        <div className="flex items-center gap-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 px-4 py-2 rounded-xl">
+          <label className="font-bold text-amber-700 dark:text-amber-400 text-sm uppercase tracking-wide">Trọng số:</label>
+          <input type="number" min="1" step="1" className="w-16 p-1 text-center font-bold border border-amber-300 dark:border-amber-700 rounded outline-none bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
             value={points} onChange={(e) => setPoints(parseFloat(e.target.value) || 1)} />
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 bg-slate-100 p-2 rounded-xl mb-6">
+      <div className="flex flex-wrap gap-2 bg-slate-100 dark:bg-slate-800/60 p-2 rounded-xl mb-6">
         {tabs.map(tab => (
           <button key={tab.id} onClick={() => setCurrentType(tab.id)}
-            className={`flex-1 text-center py-2.5 px-4 font-bold rounded-lg transition text-sm whitespace-nowrap ${currentType === tab.id ? 'bg-white text-indigo-600 shadow-md border border-slate-200 scale-105 transform' : 'text-slate-500 hover:bg-slate-200'}`}>
+            className={`flex-1 text-center py-2.5 px-4 font-bold rounded-lg transition text-sm whitespace-nowrap ${currentType === tab.id ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-md border border-slate-200 dark:border-slate-600 scale-105 transform' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/60'}`}>
             {tab.label}
           </button>
         ))}
@@ -391,7 +391,7 @@ export default function QuestionForms({ onAddQuestion }) {
 
       <div className="mb-6">
         <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Nội dung câu hỏi & Hình ảnh</label>
-        <textarea className="w-full h-32 p-4 border-2 border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:border-indigo-400 outline-none transition text-base resize-y font-medium text-slate-700 leading-relaxed shadow-sm"
+        <textarea className="w-full h-32 p-4 border-2 border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-400 dark:focus:border-indigo-500 outline-none transition text-base resize-y font-medium text-slate-700 dark:text-slate-200 leading-relaxed shadow-sm"
           placeholder="Nhập nội dung đề bài... (dán ảnh được, Ctrl+V)" value={qText} onChange={(e) => setQText(e.target.value)} onPaste={handleQuestionPaste} />
         {(currentType === 'fill' || currentType === 'clozedrag') &&
           <p className="text-amber-600 text-sm font-bold mt-2 bg-amber-50 p-2 rounded-lg border border-amber-200 inline-block">
@@ -411,7 +411,7 @@ export default function QuestionForms({ onAddQuestion }) {
 
       {dynamicForm}
 
-      <div className="text-right mt-8 pt-6 border-t border-slate-200">
+      <div className="text-right mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
         <Button onClick={handleSaveQuestion}
           className="font-black py-6 px-10 rounded-xl shadow-lg hover:shadow-xl text-lg gap-2">
           <Check className="h-6 w-6" /> Đưa Câu Hỏi Vào Đề
