@@ -101,6 +101,7 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
 
             importedExams.push({
               id: 'exam_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+              subjectId: subject.id,
               config: {
                 title: payload.config.title || file.name.replace('.html', ''),
                 subject: payload.config.subject || subject.name,
@@ -167,7 +168,7 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
           </div>
           <div>
             <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100 m-0 leading-tight flex items-center gap-2.5 flex-wrap">
-              <span>{subject.name}</span>
+              <span>{subject?.name || 'Môn học'}</span>
               <button
                 type="button"
                 onClick={handleRenameSubject}

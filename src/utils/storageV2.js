@@ -50,7 +50,11 @@ export async function loadExamsV2(subjectId = null) {
       q = query(q, where('subjectId', '==', subjectId));
     }
     const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    let exams = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (subjectId) {
+      exams = exams.filter(ex => ex.subjectId === subjectId);
+    }
+    return exams;
   } catch (e) {
     console.error('[StorageV2] loadExams error:', e);
     return [];
@@ -79,7 +83,11 @@ export function subscribeExamsV2(subjectId, callback) {
     q = query(q, where('subjectId', '==', subjectId));
   }
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    let exams = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (subjectId) {
+      exams = exams.filter(ex => ex.subjectId === subjectId);
+    }
+    callback(exams);
   }, (err) => console.error('[StorageV2] subscribeExams error:', err));
 }
 
