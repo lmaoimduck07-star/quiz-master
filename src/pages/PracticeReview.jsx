@@ -14,15 +14,29 @@ export default function PracticeReview() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Fallback data if page is loaded directly without state
-  const reviewData = location.state || null;
+  // Fallback data if page is loaded directly, refreshed, or backed into
+  const reviewData = (() => {
+    if (location.state && location.state.title && Array.isArray(location.state.questions) && location.state.questions.length > 0) {
+      return location.state;
+    }
+    try {
+      const stored = sessionStorage.getItem('qm_last_review_data');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.title && Array.isArray(parsed.questions) && parsed.questions.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (_) {}
+    return null;
+  })();
 
   if (!reviewData) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center">
         <h2 className="text-xl font-bold mb-2">Không tìm thấy dữ liệu xem lại bài làm</h2>
-        <p className="text-slate-400 text-sm mb-6 max-w-md">Vui lòng hoàn thành bài làm thực tế từ trang chính để xem lại kết quả.</p>
-        <Button onClick={() => navigate('/client/dashboard')} className="font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 py-2.5 shadow-md">
+        <p className="text-slate-400 text-sm mb-6 max-w-md">Phiên thi đã hoàn tất hoặc không hợp lệ. Mỗi phiên thi chỉ được phép truy cập 1 lần.</p>
+        <Button onClick={() => navigate('/client/dashboard')} className="font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 py-2.5 shadow-md border-transparent">
           Quay về Trang chính
         </Button>
       </div>
@@ -86,17 +100,18 @@ export default function PracticeReview() {
                     <div className="mt-4 space-y-3">
                       {(() => {
                         if (qType === 'single' || qType === 'multiselect') {
-                          return (q.options || []).map((opt, oIdx) => {
+                          const optsArray = Array.isArray(q.options) ? q.options : [];
+                          return optsArray.map((opt, oIdx) => {
                             let bgColor = 'bg-slate-50 dark:bg-slate-900/50';
                             let borderColor = 'border-slate-100 dark:border-slate-800';
                             let textClass = 'text-slate-600 dark:text-slate-400';
                             
                             const isUserSelected = qType === 'multiselect'
-                              ? (q.userAnswer || []).includes(oIdx)
+                              ? (Array.isArray(q.userAnswer) && q.userAnswer.includes(oIdx))
                               : q.userAnswer === oIdx;
                               
                             const isCorrectAns = qType === 'multiselect'
-                              ? (q.correctAnswer || []).includes(oIdx)
+                              ? (Array.isArray(q.correctAnswer) && q.correctAnswer.includes(oIdx))
                               : q.correctAnswer === oIdx;
  
                             if (isCorrectAns) {
@@ -262,8 +277,10 @@ export default function PracticeReview() {
                         }
 
                         if (qType === 'order') {
-                          const userWords = (q.userAnswer || []).map(idx => q.items[idx]);
-                          const correctWords = q.items || [];
+                          const itemsArray = Array.isArray(q.items) ? q.items : [];
+                          const userIndices = Array.isArray(q.userAnswer) ? q.userAnswer : [];
+                          const userWords = userIndices.map(idx => itemsArray[idx]).filter(Boolean);
+                          const correctWords = itemsArray;
                           return (
                             <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl space-y-4">
                               <div>

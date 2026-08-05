@@ -1151,7 +1151,9 @@ export default function MockExamMobile() {
     markSessionAsExpired(examSessionCode);
     storage.removeActiveSession(examSessionCode);
     storage.addAuditLog({ user: currentUser?.username || 'student', role: 'Student', category: 'Exam', action: `Nộp bài thi: ${title} | Điểm: ${score}/10 | Vi phạm: ${finalWarnings} lần | Lí do: ${reason}`, severity: finalWarnings >= 3 ? 'Warning' : 'Info' });
-    navigate('/client/review', { state: { title, score, correctCount, totalCount: questions.length, questions: reviewedQuestions } });
+    const reviewPayload = { title, score, correctCount, totalCount: questions.length, questions: reviewedQuestions };
+    try { sessionStorage.setItem('qm_last_review_data', JSON.stringify(reviewPayload)); } catch (_) {}
+    navigate('/client/review', { state: reviewPayload, replace: true });
   };
 
   // ── Answer handler ──

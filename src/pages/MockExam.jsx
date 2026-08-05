@@ -594,15 +594,21 @@ export default function MockExam() {
       document.exitFullscreen().catch(err => console.log("Exit fullscreen error:", err));
     }
 
-    // Navigate to review page
+    const reviewPayload = {
+      title,
+      score,
+      correctCount,
+      totalCount: questions.length,
+      questions: reviewedQuestions
+    };
+    try {
+      sessionStorage.setItem('qm_last_review_data', JSON.stringify(reviewPayload));
+    } catch (_) {}
+
+    // Navigate to review page with replace: true so back button goes to dashboard
     navigate('/client/review', {
-      state: {
-        title,
-        score,
-        correctCount,
-        totalCount: questions.length,
-        questions: reviewedQuestions
-      }
+      state: reviewPayload,
+      replace: true
     });
   };
 
