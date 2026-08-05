@@ -312,15 +312,30 @@ export async function runCodeNormalization() {
       let code = data.code;
       const subjId = data.subjectId;
       const subjCode = subjectCodeMap.get(subjId) || 'MON';
+      const updates = {};
 
       if (!code || !code.trim()) {
         const currentCount = (subjectExamsCounter.get(subjId) || 0) + 1;
         subjectExamsCounter.set(subjId, currentCount);
         code = `${subjCode}_BAI_${String(currentCount).padStart(2, '0')}`;
-        await setDoc(doc(db, 'examsV2', d.id), { code, subjectCode: subjCode }, { merge: true });
+        updates.code = code;
+        updates.subjectCode = subjCode;
+      }
+
+      if (data.questionCount === undefined) {
+        try {
+          const qSnap = await getDocs(collection(db, 'examsV2', d.id, 'questions'));
+          updates.questionCount = qSnap.size;
+        } catch {
+          updates.questionCount = 0;
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await setDoc(doc(db, 'examsV2', d.id), updates, { merge: true });
       }
     }
-    console.log('[StorageV2] Normalized Subject & Exam codes successfully ✓');
+    console.log('[StorageV2] Normalized Subject, Exam codes & question counts successfully ✓');
   } catch (e) {
     console.warn('[StorageV2] runCodeNormalization warning:', e);
   }
