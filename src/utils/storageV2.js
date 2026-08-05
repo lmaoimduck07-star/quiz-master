@@ -113,10 +113,11 @@ export async function saveQuestionsV2(examId, questions) {
     const existing = await getDocs(qCol);
     existing.forEach(d => batch.delete(d.ref));
     
-    // 2. Add new
-    questions.forEach(q => {
-      const qRef = doc(qCol, q.id);
-      batch.set(qRef, q);
+    // 2. Add new with formatted question IDs
+    questions.forEach((q, idx) => {
+      const qId = (q.id && typeof q.id === 'string' && q.id.startsWith('q_')) ? q.id : `q_${String(idx + 1).padStart(3, '0')}`;
+      const qRef = doc(qCol, qId);
+      batch.set(qRef, { ...q, id: qId });
     });
 
     // 3. Update questionCount on exam document

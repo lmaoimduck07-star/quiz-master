@@ -97,11 +97,20 @@ export default function RandomExamModal({ isOpen, onClose, subject, exams, onUpd
     const shuffledQuestions = shuffleArray(allQuestions);
     const selectedQuestions = shuffledQuestions.slice(0, questionCount);
 
-    // Tạo đề thi mới
-    const newExamId = 'ex_' + Date.now();
+    const subjCode = subject.code || 'MON';
+    const examCode = `${subjCode}_RANDOM_${Date.now().toString().slice(-4)}`;
+    const newExamId = examCode.toLowerCase();
+
+    const normalizedQuestions = selectedQuestions.map((q, idx) => ({
+      ...q,
+      id: `q_${String(idx + 1).padStart(3, '0')}`
+    }));
+
     const newExam = {
       id: newExamId,
       subjectId: subject.id,
+      subjectCode: subjCode,
+      code: examCode,
       title: examTitle.trim(),
       config: {
         title: examTitle.trim(),
@@ -117,7 +126,7 @@ export default function RandomExamModal({ isOpen, onClose, subject, exams, onUpd
 
     // Lưu đề mới vào DB
     await storageV2.saveExamV2(newExam);
-    await storageV2.saveQuestionsV2(newExamId, selectedQuestions);
+    await storageV2.saveQuestionsV2(newExamId, normalizedQuestions);
 
     alert(`🎲 Tạo đề thi ngẫu nhiên gồm ${questionCount} câu thành công!`);
     onClose();

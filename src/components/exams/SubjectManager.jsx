@@ -27,7 +27,7 @@ export default function SubjectManager({ subjects, onAddSubject, onDeleteSubject
     const finalCode = subCode.trim() ? subCode.trim().toUpperCase() : generateAutoCode(subName);
 
     onAddSubject({
-      id: 'sub_' + Date.now(),
+      id: 'sub_' + finalCode.toLowerCase(),
       code: finalCode,
       name: subName.trim(),
       isCompleted: false,

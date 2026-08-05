@@ -86,9 +86,13 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
           }
 
           if (payload && payload.config && payload.data) {
-            const normalizedQuestions = payload.data.map(q => {
+            const subjCode = subject.code || 'MON';
+            const examCode = `${subjCode}_BAI_${String(importedExams.length + 1).padStart(2, '0')}`;
+            const examId = examCode.toLowerCase();
+
+            const normalizedQuestions = payload.data.map((q, qIdx) => {
               return {
-                id: q.id || Date.now() + Math.random(),
+                id: `q_${String(qIdx + 1).padStart(3, '0')}`,
                 type: q.type || 'single',
                 question: q.question || '',
                 options: q.options || [],
@@ -104,8 +108,11 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
             });
 
             importedExams.push({
-              id: 'exam_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+              id: examId,
               subjectId: subject.id,
+              subjectCode: subjCode,
+              code: examCode,
+              title: payload.config.title || file.name.replace('.html', ''),
               config: {
                 title: payload.config.title || file.name.replace('.html', ''),
                 subject: payload.config.subject || subject.name,

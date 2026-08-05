@@ -246,9 +246,9 @@ export default function AdminDashboard() {
                       examId={editingExamId === 'new' ? null : editingExamId}
                       onBack={() => setEditingExamId(null)}
                       onSaveExam={async (examId, config, questions) => {
-                        const newExamId = examId || 'ex_' + Date.now();
                         const subjCode = currentSubject.code || (currentSubject.name || 'MON').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9 ]/g, '').split(' ').filter(Boolean).map(w => w[0].toUpperCase()).join('').slice(0, 6);
                         const examCode = config.code || `${subjCode}_BAI_${Date.now().toString().slice(-4)}`;
+                        const newExamId = examId || examCode.toLowerCase();
                         const newExam = {
                           id: newExamId,
                           subjectId: currentSubject.id,
