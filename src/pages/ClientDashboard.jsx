@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { storage } from '../utils/storage';
+import { storageV2 } from '../utils/storageV2';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import {
@@ -164,12 +165,14 @@ export default function ClientDashboard() {
   // Launch Practice Test
   const startPractice = (subject, exam) => {
     const sessionId = buildSessionId('practice', subject.name);
+    const qCount = exam.questionCount || exam.questions?.length || 10;
+    const timeInMinutes = exam.config?.time || Math.max(5, Math.round(qCount * 1.5));
     navigate(`/client/exam/${sessionId}`, {
       state: {
         examId: exam.id,
         title: exam.config?.title || exam.title,
-        questions: exam.questions,
-        timeLimit: (exam.questions.length * 1.5) * 60,
+        questions: [],
+        timeLimit: timeInMinutes * 60,
         mode: 'practice',
         subjectName: subject.name,
         examSessionCode: sessionId
@@ -179,11 +182,8 @@ export default function ClientDashboard() {
 
   // Open simulation exam select modal
   const openSimulationModal = (subject) => {
-    const allQuestions = [];
-    (subject.exams || []).forEach(ex => {
-      if (ex.questions?.length > 0) allQuestions.push(...ex.questions);
-    });
-    if (allQuestions.length === 0) {
+    const totalQCount = (subject.exams || []).reduce((sum, ex) => sum + (ex.questionCount || ex.questions?.length || 0), 0);
+    if (totalQCount === 0) {
       alert('Môn học này chưa có câu hỏi nào để tạo đề thi mô phỏng! (Mã lỗi: DASH-01)');
       return;
     }
@@ -221,7 +221,7 @@ export default function ClientDashboard() {
   };
 
   // Confirm simulation — build questions and navigate
-  const handleConfirmSimulation = () => {
+  const handleConfirmSimulation = async () => {
     if (enteredCode !== verificationCode) {
       alert('Mã xác nhận chưa chính xác! (Mã lỗi: DASH-02)');
       return;
@@ -229,18 +229,17 @@ export default function ClientDashboard() {
     setShowSimModal(false);
 
     const exams = simSubject?.exams || [];
-    let questionPool = [];
+    let targetExams = simMode === 'random' ? exams : exams.filter(ex => selectedExamIds.includes(ex.id));
 
-    if (simMode === 'random') {
-      exams.forEach(ex => {
-        if (ex.questions?.length > 0) questionPool.push(...ex.questions);
-      });
-    } else {
-      exams
-        .filter(ex => selectedExamIds.includes(ex.id))
-        .forEach(ex => {
-          if (ex.questions?.length > 0) questionPool.push(...ex.questions);
-        });
+    let questionPool = [];
+    for (const ex of targetExams) {
+      const qs = await storageV2.loadQuestionsV2(ex.id);
+      if (qs && qs.length > 0) questionPool.push(...qs);
+    }
+
+    if (questionPool.length === 0) {
+      alert('Không tìm thấy câu hỏi nào cho bài thi mô phỏng này!');
+      return;
     }
 
     const shuffled = [...questionPool].sort(() => 0.5 - Math.random());
@@ -249,8 +248,7 @@ export default function ClientDashboard() {
     // Build title showing which exams were selected
     let simTitle = 'Khảo thí mô phỏng: ' + simSubject.name;
     if (simMode === 'selected' && selectedExamIds.length > 0) {
-      const selectedNames = exams
-        .filter(ex => selectedExamIds.includes(ex.id))
+      const selectedNames = targetExams
         .map(ex => ex.config?.title || ex.title)
         .join(', ');
       simTitle = `Khảo thí mô phỏng: ${simSubject.name} (${selectedNames})`;
@@ -268,7 +266,7 @@ export default function ClientDashboard() {
         examId: 'sim_' + Date.now(),
         title: simTitle,
         questions: simulationQuestions,
-        timeLimit: 50 * 60,
+        timeLimit: Math.max(15, Math.round(simulationQuestions.length * 1.5)) * 60,
         mode: 'simulation',
         subjectName: simSubject.name,
         examSessionCode: sessionId
