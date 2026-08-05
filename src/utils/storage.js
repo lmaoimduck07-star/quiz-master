@@ -114,15 +114,14 @@ async function saveUsers(users) {
 // ─────────────────────────────────────────────
 async function loadSubjects() {
   try {
-    const snap = await getDocs(collection(db, 'subjects'));
+    const snap = await getDocs(collection(db, 'subjectsV2'));
+    const examsSnap = await getDocs(collection(db, 'examsV2'));
+    const allExams = examsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
     const subjects = snap.docs.map(d => {
       const data = { id: d.id, ...d.data() };
-      // Đảm bảo có trường status mặc định
-      if (!data.status) {
-        data.status = 'normal';
-      }
-      // Đảm bảo mỗi exam có config đúng định dạng
-      const exams = (data.exams || []).map(ex => {
+      if (!data.status) data.status = 'normal';
+      const subjExams = allExams.filter(e => e.subjectId === d.id).map(ex => {
         if (!ex.config) {
           return {
             ...ex,
@@ -137,7 +136,7 @@ async function loadSubjects() {
         }
         return ex;
       });
-      return { ...data, exams };
+      return { ...data, exams: subjExams };
     });
     return subjects;
   } catch (e) {
@@ -149,17 +148,15 @@ async function loadSubjects() {
 async function saveSubjects(subjects) {
   try {
     const batch = writeBatch(db);
-
-    // Xóa subjects không còn trong list
-    const existing = await getDocs(collection(db, 'subjects'));
+    const existing = await getDocs(collection(db, 'subjectsV2'));
     const newIds = new Set(subjects.map(s => s.id));
     existing.docs.forEach(d => {
-      if (!newIds.has(d.id)) batch.delete(doc(db, 'subjects', d.id));
+      if (!newIds.has(d.id)) batch.delete(doc(db, 'subjectsV2', d.id));
     });
 
-    // Upsert tất cả subjects
     subjects.forEach(subject => {
-      batch.set(doc(db, 'subjects', subject.id), subject, { merge: true });
+      const { exams, ...cleanSubject } = subject;
+      batch.set(doc(db, 'subjectsV2', subject.id), cleanSubject, { merge: true });
     });
 
     await batch.commit();
@@ -463,67 +460,17 @@ function filterOldTestProblems(list) {
 
 async function loadCodingProblems() {
   try {
-    let allProblems = [];
-
-    // 1. Tải từ collection 'coding_problems' trong Firestore
-    const snap = await getDocs(collection(db, 'coding_problems'));
-    if (!snap.empty) {
-      snap.docs.forEach(d => {
-        allProblems.push({ id: d.id, ...d.data() });
-      });
-    }
-
-    // 2. Tải từ các môn học trong Firestore có chứa codingProblems
-    try {
-      const subjectsSnap = await getDocs(collection(db, 'subjects'));
-      subjectsSnap.docs.forEach(d => {
-        const sData = d.data();
-        if (Array.isArray(sData.codingProblems) && sData.codingProblems.length > 0) {
-          sData.codingProblems.forEach(p => {
-            if (!allProblems.some(existing => existing.id === p.id)) {
-              allProblems.push({ ...p, subjectId: d.id });
-            }
-          });
-        }
-      });
-    } catch (e) {
-      console.warn('[Storage] loadCodingProblems -> warning reading subjects coding problems:', e);
-    }
-
-    allProblems = filterOldTestProblems(allProblems);
-    allProblems = allProblems.map(p => {
-      if (p.templates && p.templates.javascript) {
-        const { javascript, ...rest } = p.templates;
-        return { ...p, templates: rest };
-      }
-      return p;
-    });
-
+    const snap = await getDocs(collection(db, 'coding_problemsV2'));
+    const allProblems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (allProblems.length > 0) {
       localStorage.setItem('qm_coding_problems', JSON.stringify(allProblems));
       return allProblems;
     }
-
-    // 3. Fallback sang LocalStorage nếu Firestore chưa có dữ liệu
     const localData = localStorage.getItem('qm_coding_problems');
-    let problems = localData ? JSON.parse(localData) : DEFAULT_CODING_PROBLEMS;
-    problems = filterOldTestProblems(problems);
-    problems = problems.map(p => {
-      if (p.templates && p.templates.javascript) {
-        const { javascript, ...rest } = p.templates;
-        return { ...p, templates: rest };
-      }
-      return p;
-    });
-    return problems;
+    return localData ? JSON.parse(localData) : DEFAULT_CODING_PROBLEMS;
   } catch (e) {
     console.error('[Storage] loadCodingProblems error:', e);
-    try {
-      const localData = localStorage.getItem('qm_coding_problems');
-      return localData ? JSON.parse(localData) : DEFAULT_CODING_PROBLEMS;
-    } catch (err) {
-      return DEFAULT_CODING_PROBLEMS;
-    }
+    return DEFAULT_CODING_PROBLEMS;
   }
 }
 
@@ -720,9 +667,20 @@ async function saveSystemSettings(settings) {
 // REALTIME SUBSCRIPTIONS (Lắng nghe Firestore Realtime)
 // ─────────────────────────────────────────────
 function subscribeSubjects(callback) {
-  return onSnapshot(collection(db, 'subjects'), (snap) => {
-    const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    callback(data);
+  return onSnapshot(collection(db, 'subjectsV2'), async (snap) => {
+    try {
+      const examsSnap = await getDocs(collection(db, 'examsV2'));
+      const allExams = examsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const data = snap.docs.map(d => {
+        const subjData = { id: d.id, ...d.data() };
+        const subjExams = allExams.filter(e => e.subjectId === d.id);
+        return { ...subjData, exams: subjExams };
+      });
+      callback(data);
+    } catch {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      callback(data);
+    }
   }, (err) => console.warn('[Storage] subscribeSubjects error:', err));
 }
 

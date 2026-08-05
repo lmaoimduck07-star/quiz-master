@@ -250,7 +250,24 @@ export async function runMigrationOnce() {
         }
       }
     }
-    console.log('[StorageV2] Migration hoàn tất!');
+
+    // Tự động dọn dẹp các Collection V1 cũ khỏi Firebase
+    try {
+      const oldCols = ['subjects', 'coding_problems', 'active_sessions'];
+      for (const colName of oldCols) {
+        const snap = await getDocs(collection(db, colName));
+        if (!snap.empty) {
+          const batch = writeBatch(db);
+          snap.docs.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+          console.log(`[StorageV2] Đã xóa dọn dẹp Collection V1 cũ: ${colName}`);
+        }
+      }
+    } catch (e) {
+      console.warn('[StorageV2] Dọn dẹp V1 warning:', e);
+    }
+
+    console.log('[StorageV2] Migration & Clean V1 hoàn tất!');
   } catch (e) {
     console.error('[StorageV2] Migration lỗi:', e);
   }
