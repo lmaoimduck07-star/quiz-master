@@ -102,8 +102,8 @@ function ActionModal({ modal, onClose, onConfirm, onBulkConfirm }) {
 
   if (type === 'terminate') {
     const modeConfig = getModeConfig(session.mode);
-    return (
-      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={handleOverlayClick}>
+    return createPortal(
+      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100000] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={handleOverlayClick}>
         <div className="w-full max-w-sm bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900/60 rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
           <div className="bg-red-50 dark:bg-red-950/40 px-6 py-4 border-b border-red-100 dark:border-red-900/50 flex items-center gap-3">
             <div className="p-2 bg-red-500/15 rounded-xl"><Lock className="h-5 w-5 text-red-500" /></div>
@@ -147,12 +147,12 @@ function ActionModal({ modal, onClose, onConfirm, onBulkConfirm }) {
           </div>
         </div>
       </div>
-    );
+    , document.body);
   }
 
   if (type === 'delete') {
-    return (
-      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={handleOverlayClick}>
+    return createPortal(
+      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100000] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={handleOverlayClick}>
         <div className="w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
           <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3">
             <div className="p-2 bg-slate-500/10 rounded-xl"><Trash2 className="h-5 w-5 text-slate-500" /></div>
@@ -174,12 +174,12 @@ function ActionModal({ modal, onClose, onConfirm, onBulkConfirm }) {
           </div>
         </div>
       </div>
-    );
+    , document.body);
   }
 
   if (type === 'sendMsg') {
-    return (
-      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={handleOverlayClick}>
+    return createPortal(
+      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100000] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={handleOverlayClick}>
         <div className="w-full max-w-sm bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/60 rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
           <div className="bg-amber-50 dark:bg-amber-950/30 px-6 py-4 border-b border-amber-100 dark:border-amber-900/50 flex items-center gap-3">
             <div className="p-2 bg-amber-500/15 rounded-xl"><MessageSquare className="h-5 w-5 text-amber-500" /></div>
@@ -212,12 +212,12 @@ function ActionModal({ modal, onClose, onConfirm, onBulkConfirm }) {
           </div>
         </div>
       </div>
-    );
+    , document.body);
   }
 
   if (type === 'bulkTerminate') {
-    return (
-      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={handleOverlayClick}>
+    return createPortal(
+      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100000] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={handleOverlayClick}>
         <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900/60 rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
           <div className="bg-red-50 dark:bg-red-950/40 px-6 py-4 border-b border-red-100 dark:border-red-900/50 flex items-center gap-3">
             <div className="p-2 bg-red-500/15 rounded-xl"><Lock className="h-5 w-5 text-red-500" /></div>
@@ -247,7 +247,7 @@ function ActionModal({ modal, onClose, onConfirm, onBulkConfirm }) {
           </div>
         </div>
       </div>
-    );
+    , document.body);
   }
 
   return null;
