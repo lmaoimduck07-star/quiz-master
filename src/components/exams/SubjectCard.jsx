@@ -133,8 +133,8 @@ export default function SubjectCard({ subject, onDelete, onOpen, onUpdate }) {
       <div className="flex gap-3">
         <Button
           variant={isCompleted ? "success" : isCoding ? "primary" : "primary"}
-          onClick={() => onOpen(subject.id)}
-          className="h-12 px-6 font-bold"
+          onClick={() => onOpen(subject)}
+          className="h-12 px-6 font-bold cursor-pointer"
         >
           {isCompleted ? 'Xem Môn Này' : <><span className="mr-2">Vào Môn Này</span> <ArrowRight className="h-4 w-4" /></>}
         </Button>

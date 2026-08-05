@@ -319,7 +319,10 @@ export default function AdminDashboard() {
                     onAddSubject={handleAddSubject}
                     onDeleteSubject={handleDeleteSubject}
                     onUpdateSubject={handleUpdateSubject}
-                    onOpenSubject={(subj) => setCurrentSubject(subj)}
+                    onOpenSubject={(subjOrId) => {
+                      const target = typeof subjOrId === 'string' ? subjects.find(s => s.id === subjOrId) : subjOrId;
+                      setCurrentSubject(target || null);
+                    }}
                   />
                 );
               })()}
