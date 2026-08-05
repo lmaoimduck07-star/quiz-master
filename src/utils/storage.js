@@ -769,20 +769,20 @@ function subscribeSingleSession(sessionId, callback) {
 async function cleanStaleSessions() {
   try {
     const snap = await getDocs(collection(db, 'active_sessionsV2'));
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(); // 24h trước
-    const batch = writeBatch(db);
+    const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
     let count = 0;
-    snap.docs.forEach(d => {
+    for (const d of snap.docs) {
+      if (d.id.startsWith('presence_')) continue;
       const data = d.data();
       const lastActive = data.lastActive || data.onlineSince || '';
-      if (lastActive && lastActive < cutoff) {
-        batch.delete(d.ref);
+      const isStale = data.status === 'deleted' || data.status === 'submitted' || (lastActive && lastActive < twoMinAgo);
+      if (isStale) {
+        await storageV2.deleteFullSessionV2(d.id);
         count++;
       }
-    });
+    }
     if (count > 0) {
-      await batch.commit();
-      console.log(`[Storage] cleanStaleSessions: đã xóa ${count} session rác cũ > 24h`);
+      console.log(`[Storage] cleanStaleSessions: đã dọn dẹp ${count} session rác`);
     }
   } catch (e) {
     console.warn('[Storage] cleanStaleSessions error:', e);

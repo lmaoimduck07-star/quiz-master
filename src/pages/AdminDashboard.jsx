@@ -58,16 +58,23 @@ export default function AdminDashboard() {
       setLogs(l || []);
     });
 
-    // Lắng nghe Realtime kết quả thi → Tự nhảy số khi học sinh nộp bài (không cần F5)
-    const unsubResults = storage.subscribeExamResults(null, (r) => {
-      setExamResults(r || []);
+    // Lắng nghe Realtime kết quả thi (toàn bộ)
+    const unsubResults = storage.subscribeExamResults(null, (res) => {
+      setExamResults(res || []);
     });
+
+    // Dọn dẹp session rác cũ định kỳ
+    storage.cleanStaleSessions();
+    const staleTimer = setInterval(() => {
+      storage.cleanStaleSessions();
+    }, 30000);
 
     return () => {
       if (typeof unsubSubj === 'function') unsubSubj();
       if (typeof unsubUsers === 'function') unsubUsers();
       if (typeof unsubLogs === 'function') unsubLogs();
       if (typeof unsubResults === 'function') unsubResults();
+      clearInterval(staleTimer);
     };
   }, []);
 

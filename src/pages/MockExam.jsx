@@ -478,7 +478,7 @@ export default function MockExam() {
     };
   }, [currentUser, title, mode]);
 
-  const submitExam = (finalWarnings = warningCount, reason = 'Chủ động') => {
+  const submitExam = async (finalWarnings = warningCount, reason = 'Chủ động') => {
     submitExamRef.current = submitExam;
     if (isSubmittedRef.current && reason === 'Chủ động') return; // Tránh chạy 2 lần
     isSubmittedRef.current = true;
@@ -578,7 +578,7 @@ export default function MockExam() {
     // Clear active exam session
     localStorage.removeItem('qm_active_session');
     markSessionAsExpired(examSessionCode);
-    storage.removeActiveSession(examSessionCode);
+    await storage.removeActiveSession(examSessionCode);
 
     // Audit log
     storage.addAuditLog({

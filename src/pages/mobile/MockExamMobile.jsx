@@ -1081,7 +1081,7 @@ export default function MockExamMobile() {
   }, [screen]);
 
   // ── submitExam ──
-  const submitExam = (finalWarnings = warningCount, reason = 'Chủ động') => {
+  const submitExam = async (finalWarnings = warningCount, reason = 'Chủ động') => {
     submitExamRef.current = submitExam;
     if (isSubmittedRef.current && reason === 'Chủ động') return;
     isSubmittedRef.current = true;
@@ -1149,7 +1149,7 @@ export default function MockExamMobile() {
     storage.saveExamResult(newResult);
     localStorage.removeItem('qm_active_session');
     markSessionAsExpired(examSessionCode);
-    storage.removeActiveSession(examSessionCode);
+    await storage.removeActiveSession(examSessionCode);
     storage.addAuditLog({ user: currentUser?.username || 'student', role: 'Student', category: 'Exam', action: `Nộp bài thi: ${title} | Điểm: ${score}/10 | Vi phạm: ${finalWarnings} lần | Lí do: ${reason}`, severity: finalWarnings >= 3 ? 'Warning' : 'Info' });
     const reviewPayload = { title, score, correctCount, totalCount: questions.length, questions: reviewedQuestions };
     try { sessionStorage.setItem('qm_last_review_data', JSON.stringify(reviewPayload)); } catch (_) {}
