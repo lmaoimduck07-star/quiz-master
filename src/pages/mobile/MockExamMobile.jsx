@@ -1016,26 +1016,26 @@ export default function MockExamMobile() {
     return () => clearInterval(hb);
   }, [screen, examSessionCode]);
 
-  // ── Admin Remote Commands ──
+  // ── Admin Remote Commands (Realtime Single Session V2 Listener) ──
   useEffect(() => {
     if (!examSessionCode) return;
     const hasSeenRef = { current: false };
-    const unsub = storage.subscribeActiveSessions((allSessions) => {
-      const mySession = allSessions.find(s => s.id === examSessionCode);
+
+    const handleSessionUpdate = (mySession) => {
       if (mySession) {
         hasSeenRef.current = true;
         if (mySession.status === 'terminated' && !isSubmittedRef.current) {
           isLockOrDeletedRef.current = true;
+          isSubmittedRef.current = true;
           markSessionAsExpired(examSessionCode);
           localStorage.removeItem('qm_active_session');
           setIsTerminatedByAdmin(true);
-          if (typeof submitExamRef.current === 'function') submitExamRef.current(warningCountRef.current, 'Bị khóa từ xa');
         } else if (mySession.status === 'deleted' && !isSubmittedRef.current) {
           isLockOrDeletedRef.current = true;
+          isSubmittedRef.current = true;
           markSessionAsExpired(examSessionCode);
           localStorage.removeItem('qm_active_session');
           setIsDeletedByAdmin(true);
-          storage.removeActiveSession(examSessionCode);
         } else if (mySession.adminMessage && mySession.adminMessageTime !== lastAdminMsgTimeRef.current) {
           lastAdminMsgTimeRef.current = mySession.adminMessageTime;
           setAdminAlertMsg(mySession.adminMessage);
@@ -1043,13 +1043,17 @@ export default function MockExamMobile() {
         }
       } else if (hasSeenRef.current && !isSubmittedRef.current && !isLockOrDeletedRef.current) {
         isLockOrDeletedRef.current = true;
+        isSubmittedRef.current = true;
         markSessionAsExpired(examSessionCode);
         localStorage.removeItem('qm_active_session');
         setIsDeletedByAdmin(true);
-        storage.removeActiveSession(examSessionCode);
       }
-    });
-    return () => { if (typeof unsub === 'function') unsub(); };
+    };
+
+    const unsubSingle = storageV2.subscribeSingleSessionV2(examSessionCode, handleSessionUpdate);
+    return () => {
+      if (typeof unsubSingle === 'function') unsubSingle();
+    };
   }, [examSessionCode]);
 
   const handleSendReply = async (replyText) => {
@@ -1231,11 +1235,11 @@ export default function MockExamMobile() {
   if (isBlockedByDupTab) {
     return <ErrorScreen icon={ShieldAlert} title="Phiên thi đang mở ở tab khác!" subtitle="Bài thi mô phỏng đang mở ở cửa sổ/tab khác. Vui lòng đóng tab này." color="red" />;
   }
-  if (isInvalidSession || isDeletedByAdmin) {
-    return <ErrorScreen icon={AlertTriangle} title="Session không hợp lệ" subtitle="Session không hợp lệ, vui lòng liên hệ admin để được hỗ trợ." />;
-  }
   if (isTerminatedByAdmin) {
-    return <ErrorScreen icon={Lock} title="Bài thi đã bị khóa từ xa" subtitle="Giám thị đã dừng bài thi của bạn. Kết quả đã được ghi nhận." color="red" />;
+    return <ErrorScreen icon={Lock} title="BÀI THI ĐÃ BỊ KHÓA TỪ XA" subtitle="Giám thị đã khóa bài thi của bạn từ xa. Bạn không thể tiếp tục thao tác." color="red" />;
+  }
+  if (isDeletedByAdmin || isInvalidSession) {
+    return <ErrorScreen icon={AlertTriangle} title="Session không hợp lệ" subtitle="Session không hợp lệ hoặc đã bị dọn dẹp, vui lòng quay về trang chính." color="red" />;
   }
 
   // ── Screen: Login (Password) ──
