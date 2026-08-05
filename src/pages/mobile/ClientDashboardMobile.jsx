@@ -204,7 +204,7 @@ function PracticeListModal({ subject, onStart, onClose }) {
                   <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
                     {exam.config?.title || exam.title || 'Bài thi'}
                   </p>
-                  <p className="text-xs text-slate-400 mt-0.5">{exam.questions?.length ?? 0} câu hỏi</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{exam.questions?.length || exam.questionCount || 0} câu hỏi</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>

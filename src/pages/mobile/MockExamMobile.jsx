@@ -871,8 +871,8 @@ export default function MockExamMobile() {
   const examData = savedSession?.examData || location.state || null;
   const { examId, title, timeLimit = 15 * 60, mode, subjectName } = examData || {};
   
-  const [questions, setQuestions] = useState(examData?.questions || []);
-  const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
+  const [questions, setQuestions] = useState(() => examData?.questions?.filter(Boolean) || []);
+  const [isLoadingQuestions, setIsLoadingQuestions] = useState(() => (examData?.questions?.filter(Boolean)?.length || 0) === 0);
 
   const [examSessionCode] = useState(() => {
     const code = urlSessionId || savedSession?.examSessionCode || location.state?.examSessionCode || `exam_${currentUser?.id || 'guest'}_${examId || 'quiz'}`;
@@ -949,10 +949,14 @@ export default function MockExamMobile() {
 
   // ── Fetch Questions V2 ──
   useEffect(() => {
-    if (questions.length === 0 && examId) {
+    if (examId && questions.length === 0) {
       setIsLoadingQuestions(true);
       storageV2.loadQuestionsV2(examId).then(qs => {
-        setQuestions(qs || []);
+        if (qs && qs.length > 0) {
+          setQuestions(qs);
+        }
+      }).catch(err => {
+        console.error('[MockExamMobile] Error loading V2 questions:', err);
       }).finally(() => {
         setIsLoadingQuestions(false);
       });
@@ -1185,7 +1189,15 @@ export default function MockExamMobile() {
     touchStartY.current = null;
   };
 
-  // ── Error screens ──
+  // ── Error / Loading screens ──
+  if (isLoadingQuestions) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center select-none">
+        <Loader2 className="h-10 w-10 animate-spin text-blue-400 mx-auto mb-4" />
+        <p className="font-bold text-slate-400 text-sm">Đang tải dữ liệu câu hỏi bài thi...</p>
+      </div>
+    );
+  }
   if (!examData) {
     return <ErrorScreen icon={AlertTriangle} title="Chưa chọn bài thi" subtitle="Vui lòng chọn môn học và bài thi từ trang chính để bắt đầu." />;
   }
