@@ -3,9 +3,10 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { storage } from '../utils/storage';
+import { storageV2 } from '../utils/storageV2';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
-import { AlertTriangle, Clock, Flag, Lock, Play, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Clock, Flag, Lock, Play, CheckCircle2, ShieldAlert, Loader2 } from 'lucide-react';
 
 const isSessionExpired = (code) => {
   if (!code) return false;
@@ -80,7 +81,26 @@ export default function MockExam() {
 
   // Extract state passed from ClientDashboard or fall back to saved session
   const examData = savedSession?.examData || location.state || null;
-  const { examId, title, questions = [], timeLimit = 15 * 60, mode, subjectName } = examData || {};
+  const { examId, title, timeLimit: rawTimeLimit, mode, subjectName } = examData || {};
+  const timeLimit = rawTimeLimit || (examData?.config?.time ? examData.config.time * 60 : 15 * 60);
+
+  const [questions, setQuestions] = useState(() => examData?.questions?.filter(Boolean) || []);
+  const [isLoadingQuestions, setIsLoadingQuestions] = useState(() => (examData?.questions?.filter(Boolean)?.length || 0) === 0);
+
+  useEffect(() => {
+    if (examId && questions.length === 0) {
+      setIsLoadingQuestions(true);
+      storageV2.loadQuestionsV2(examId).then((qs) => {
+        if (qs && qs.length > 0) {
+          setQuestions(qs);
+        }
+        setIsLoadingQuestions(false);
+      }).catch(err => {
+        console.error('[MockExam] Error loading V2 questions:', err);
+        setIsLoadingQuestions(false);
+      });
+    }
+  }, [examId, questions.length]);
 
   // ưu tiên sessionId từ URL, sau đó mới tới location.state, sau cùng mới tự sinh
   const [examSessionCode] = useState(() => {
@@ -593,6 +613,15 @@ export default function MockExam() {
   };
 
   const isWarningTime = timeLeft < 300;
+
+  if (isLoadingQuestions) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center">
+        <Loader2 className="h-10 w-10 animate-spin text-blue-400 mx-auto mb-4" />
+        <p className="font-bold text-slate-400">Đang nạp dữ liệu đề thi từ V2...</p>
+      </div>
+    );
+  }
 
   if (!examData) {
     return (
