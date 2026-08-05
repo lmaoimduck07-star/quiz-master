@@ -173,6 +173,21 @@ export function subscribeSingleSessionV2(sessionId, callback) {
   });
 }
 
+export async function deleteFullSessionV2(sessionId) {
+  if (!sessionId) return;
+  try {
+    const ansSnap = await getDocs(collection(db, 'active_sessionsV2', sessionId, 'answers'));
+    if (!ansSnap.empty) {
+      const batch = writeBatch(db);
+      ansSnap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+    await deleteDoc(doc(db, 'active_sessionsV2', sessionId));
+  } catch (e) {
+    console.warn('[StorageV2] deleteFullSessionV2 error:', e);
+  }
+}
+
 // ─────────────────────────────────────────────
 // CODING PROBLEMS V2 (Top-level Collection)
 // ─────────────────────────────────────────────
@@ -214,7 +229,7 @@ export const storageV2 = {
   loadExamsV2, saveExamV2, deleteExamV2, subscribeExamsV2,
   loadQuestionsV2, saveQuestionsV2, subscribeQuestionsV2,
   loadCodingProblemsV2, saveCodingProblemV2, deleteCodingProblemV2,
-  updateActiveSessionV2, saveAnswerDeltaV2, subscribeSingleSessionV2,
+  updateActiveSessionV2, saveAnswerDeltaV2, subscribeSingleSessionV2, deleteFullSessionV2,
   runMigrationOnce, runCodeNormalization
 };
 

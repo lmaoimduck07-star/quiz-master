@@ -848,19 +848,19 @@ async function deleteActiveSessionRemotely(sessionId) {
     await setDoc(docRef, { status: 'deleted', deletedAt: new Date().toISOString() }, { merge: true });
     setTimeout(async () => {
       try {
-        await deleteDoc(docRef);
+        await storageV2.deleteFullSessionV2(sessionId);
       } catch (err) { }
-    }, 5000);
+    }, 3000);
   } catch (e) {
     console.error('[Storage] deleteActiveSessionRemotely error:', e);
-    try { await deleteDoc(doc(db, 'active_sessionsV2', sessionId)); } catch (_) { }
+    try { await storageV2.deleteFullSessionV2(sessionId); } catch (_) { }
   }
 }
 
 async function removeActiveSession(sessionId) {
   if (!sessionId) return;
   try {
-    await deleteDoc(doc(db, 'active_sessionsV2', sessionId));
+    await storageV2.deleteFullSessionV2(sessionId);
   } catch (e) {
     console.warn('[Storage] removeActiveSession error:', e);
   }
