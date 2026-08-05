@@ -10,9 +10,13 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
   const [exams, setExams] = useState([]);
 
   useEffect(() => {
+    if (!subject || !subject.id) {
+      setExams([]);
+      return;
+    }
     const unsub = storageV2.subscribeExamsV2(subject.id, setExams);
-    return () => { if (typeof unsub === 'function') unsub(); }
-  }, [subject.id]);
+    return () => { if (typeof unsub === 'function') unsub(); };
+  }, [subject?.id]);
   
   const handleRenameSubject = () => {
     const newName = prompt("Nhập tên mới cho môn học này:", subject.name);

@@ -40,10 +40,10 @@ export default function AdminDashboard() {
     // Lắng nghe Realtime môn học V2
     const unsubSubj = storageV2.subscribeSubjectsV2((s) => {
       setSubjects(s || []);
-      // Nếu đang mở 1 môn, cần update lại currentSubject để có thông tin mới nhất (tên, mô tả...)
+      // Nếu đang mở 1 môn, cần update lại currentSubject để có thông tin mới nhất
       setCurrentSubject(prev => {
-        if (!prev) return prev;
-        return s.find(subj => subj.id === prev.id) || prev;
+        if (!prev || !prev.id) return null;
+        return s.find(subj => subj.id === prev.id) || null;
       });
       setDataLoading(false);
     });
@@ -269,6 +269,10 @@ export default function AdminDashboard() {
                 }
 
                 if (currentSubject) {
+                  if (!currentSubject.id) {
+                    setCurrentSubject(null);
+                    return null;
+                  }
                   const isCoding = currentSubject.status === 'developer';
                   if (isCoding) {
                     return (
