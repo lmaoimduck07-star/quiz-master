@@ -21,6 +21,11 @@ export default function ExamCard({ exam, isCompleted, onDelete, onEdit, onPlay }
         <div className="min-w-0">
           <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 m-0 flex items-center gap-2">
             <span className="truncate" title={exam.config.title}>{exam.config.title}</span>
+            {exam.code && (
+              <span className="text-[10px] font-black font-mono bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800/50 shrink-0">
+                {exam.code}
+              </span>
+            )}
             {!isCompleted && (
               <button 
                 onClick={handleRename}
@@ -38,7 +43,7 @@ export default function ExamCard({ exam, isCompleted, onDelete, onEdit, onPlay }
               <Clock className="h-3.5 w-3.5" /> {exam.config.time > 0 ? `${exam.config.time} phút` : 'Làm tự do'}
             </span>
             <span className="flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-505 dark:text-indigo-350 px-2.5 py-0.5 rounded-md border border-indigo-100 dark:border-indigo-900/30">
-              <HelpCircle className="h-3.5 w-3.5" /> {exam.questions?.length || 0} câu hỏi
+              <HelpCircle className="h-3.5 w-3.5" /> {exam.questionCount ?? exam.questions?.length ?? 0} câu hỏi
             </span>
           </div>
         </div>

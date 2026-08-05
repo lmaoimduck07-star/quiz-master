@@ -215,7 +215,7 @@ export const storageV2 = {
   loadQuestionsV2, saveQuestionsV2, subscribeQuestionsV2,
   loadCodingProblemsV2, saveCodingProblemV2, deleteCodingProblemV2,
   updateActiveSessionV2, saveAnswerDeltaV2, subscribeSingleSessionV2,
-  runMigrationOnce
+  runMigrationOnce, runCodeNormalization
 };
 
 export async function runMigrationOnce() {
@@ -282,6 +282,47 @@ export async function runMigrationOnce() {
     console.log('[StorageV2] Migration & Clean V1 hoàn tất!');
   } catch (e) {
     console.error('[StorageV2] Migration lỗi:', e);
+  }
+}
+
+export async function runCodeNormalization() {
+  try {
+    const subSnap = await getDocs(collection(db, 'subjectsV2'));
+    const subjectCodeMap = new Map();
+
+    for (const d of subSnap.docs) {
+      const data = d.data();
+      let code = data.code;
+      if (!code || !code.trim()) {
+        const clean = (data.name || 'MON')
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-zA-Z0-9 ]/g, '')
+          .split(' ').filter(Boolean);
+        code = clean.length === 1 ? clean[0].slice(0, 4).toUpperCase() : clean.map(w => w[0].toUpperCase()).join('').slice(0, 6);
+        await setDoc(doc(db, 'subjectsV2', d.id), { code }, { merge: true });
+      }
+      subjectCodeMap.set(d.id, code);
+    }
+
+    const examSnap = await getDocs(collection(db, 'examsV2'));
+    const subjectExamsCounter = new Map();
+
+    for (const d of examSnap.docs) {
+      const data = d.data();
+      let code = data.code;
+      const subjId = data.subjectId;
+      const subjCode = subjectCodeMap.get(subjId) || 'MON';
+
+      if (!code || !code.trim()) {
+        const currentCount = (subjectExamsCounter.get(subjId) || 0) + 1;
+        subjectExamsCounter.set(subjId, currentCount);
+        code = `${subjCode}_BAI_${String(currentCount).padStart(2, '0')}`;
+        await setDoc(doc(db, 'examsV2', d.id), { code, subjectCode: subjCode }, { merge: true });
+      }
+    }
+    console.log('[StorageV2] Normalized Subject & Exam codes successfully ✓');
+  } catch (e) {
+    console.warn('[StorageV2] runCodeNormalization warning:', e);
   }
 }
 

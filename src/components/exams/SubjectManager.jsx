@@ -6,6 +6,17 @@ import { BookOpen, BarChart2, Plus, BookCheck } from 'lucide-react';
 
 export default function SubjectManager({ subjects, onAddSubject, onDeleteSubject, onOpenSubject, onUpdateSubject }) {
   const [subName, setSubName] = useState('');
+  const [subCode, setSubCode] = useState('');
+
+  const generateAutoCode = (name) => {
+    if (!name) return '';
+    const clean = name
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9 ]/g, '')
+      .split(' ').filter(Boolean);
+    if (clean.length === 1) return clean[0].slice(0, 4).toUpperCase();
+    return clean.map(w => w[0].toUpperCase()).join('').slice(0, 6);
+  };
 
   const handleCreate = () => {
     if (!subName.trim()) {
@@ -13,8 +24,11 @@ export default function SubjectManager({ subjects, onAddSubject, onDeleteSubject
       return;
     }
 
+    const finalCode = subCode.trim() ? subCode.trim().toUpperCase() : generateAutoCode(subName);
+
     onAddSubject({
       id: 'sub_' + Date.now(),
+      code: finalCode,
       name: subName.trim(),
       isCompleted: false,
       status: 'normal',
@@ -22,6 +36,7 @@ export default function SubjectManager({ subjects, onAddSubject, onDeleteSubject
     });
 
     setSubName('');
+    setSubCode('');
   };
 
   const activeSubs = subjects.filter(s => !s.isCompleted);
@@ -41,13 +56,21 @@ export default function SubjectManager({ subjects, onAddSubject, onDeleteSubject
 
       {/* Box tạo môn mới */}
       <div className="flex flex-col md:flex-row items-center gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm mb-12 transition-colors">
-        <div className="flex-1 w-full">
+        <div className="flex-1 w-full flex flex-col md:flex-row gap-3">
           <Input
             type="text"
             placeholder="Nhập tên môn học mới (VD: Hệ điều hành, Mạng...)"
-            className="w-full text-lg border-2 border-dashed h-14 rounded-xl"
+            className="flex-1 text-base border-2 border-dashed h-14 rounded-xl"
             value={subName}
             onChange={(e) => setSubName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+          />
+          <Input
+            type="text"
+            placeholder={`Mã môn (${generateAutoCode(subName) || 'TỰ ĐỘNG'})`}
+            className="w-full md:w-48 text-base border-2 border-dashed h-14 rounded-xl uppercase font-mono font-bold"
+            value={subCode}
+            onChange={(e) => setSubCode(e.target.value.toUpperCase())}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
           />
         </div>

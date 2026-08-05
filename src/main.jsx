@@ -4,8 +4,8 @@ import './index.css'
 import App from './App.jsx'
 import { storageV2 } from './utils/storageV2.js'
 
-// Khởi chạy ngầm DB Migration sang cấu trúc NoSQL mới (Subcollections)
-storageV2.runMigrationOnce().catch(console.error);
+// Khởi chạy ngầm DB Migration & Chuẩn hóa Mã Môn/Mã Đề thi sang V2
+storageV2.runMigrationOnce().then(() => storageV2.runCodeNormalization()).catch(console.error);
 
 // Initialize Theme
 if (localStorage.getItem('qm_theme') === 'dark' || 

@@ -92,6 +92,11 @@ export default function SubjectCard({ subject, onDelete, onOpen, onUpdate }) {
           <div className="flex items-center gap-2.5 flex-wrap">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 m-0 leading-snug truncate flex items-center gap-2">
               <span>{subject.name}</span>
+              {subject.code && (
+                <span className="text-[10px] font-black font-mono bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800/50">
+                  {subject.code}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={handleRenameSubject}
