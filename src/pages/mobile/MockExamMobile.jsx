@@ -18,7 +18,8 @@ import { useAuth } from '../../context/AuthContext';
 import { storage } from '../../utils/storage';
 import {
   AlertTriangle, Clock, Flag, Lock, Play, CheckCircle2,
-  ShieldAlert, ChevronLeft, ChevronRight, Grid3X3, X, Loader2
+  ShieldAlert, ChevronLeft, ChevronRight, Grid3X3, X, Loader2,
+  Send, MessageSquare
 } from 'lucide-react';
 import { storageV2 } from '../../utils/storageV2';
 
@@ -899,6 +900,8 @@ export default function MockExamMobile() {
   const [isTerminatedByAdmin, setIsTerminatedByAdmin] = useState(false);
   const [isDeletedByAdmin, setIsDeletedByAdmin] = useState(false);
   const [actionLogs, setActionLogs] = useState([]);
+  const [adminAlertMsg, setAdminAlertMsg] = useState(null);
+  const [adminAlertTime, setAdminAlertTime] = useState(null);
 
   // Screen flow
   const examPassword = examData?.password || examData?.config?.password || '';
@@ -1035,7 +1038,8 @@ export default function MockExamMobile() {
           storage.removeActiveSession(examSessionCode);
         } else if (mySession.adminMessage && mySession.adminMessageTime !== lastAdminMsgTimeRef.current) {
           lastAdminMsgTimeRef.current = mySession.adminMessageTime;
-          alert(`💬 THÔNG BÁO TỪ GIÁM THỊ:\n"${mySession.adminMessage}"`);
+          setAdminAlertMsg(mySession.adminMessage);
+          setAdminAlertTime(mySession.adminMessageTime ? new Date(mySession.adminMessageTime).toLocaleTimeString('vi-VN') : new Date().toLocaleTimeString('vi-VN'));
         }
       } else if (hasSeenRef.current && !isSubmittedRef.current && !isLockOrDeletedRef.current) {
         isLockOrDeletedRef.current = true;
@@ -1047,6 +1051,29 @@ export default function MockExamMobile() {
     });
     return () => { if (typeof unsub === 'function') unsub(); };
   }, [examSessionCode]);
+
+  const handleSendReply = async (replyText) => {
+    if (!replyText || !examSessionCode) return;
+    try {
+      await storageV2.updateActiveSessionV2(examSessionCode, {
+        studentReply: replyText,
+        studentReplyTime: new Date().toISOString(),
+        actionLogs: [
+          { time: new Date().toLocaleTimeString('vi-VN'), detail: `Học sinh phản hồi: "${replyText}"` },
+          ...(actionLogs || [])
+        ].slice(0, 30)
+      });
+      storage.addAuditLog({
+        user: currentUser?.username || 'student',
+        role: 'Student',
+        category: 'Exam',
+        action: `Học sinh phản hồi giám thị: ${replyText}`,
+        severity: 'Info'
+      });
+    } catch (err) {
+      console.error('[MockExamMobile] handleSendReply error:', err);
+    }
+  };
 
   // ── Cleanup on unmount ──
   useEffect(() => {
@@ -1610,6 +1637,125 @@ export default function MockExamMobile() {
           onCancel={() => setShowSubmitModal(false)}
         />
       )}
+
+      {adminAlertMsg && (
+        <AdminAlertModal
+          message={adminAlertMsg}
+          time={adminAlertTime}
+          onSendReply={handleSendReply}
+          onClose={() => setAdminAlertMsg(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Admin Message Alert Modal with Quick Responses ──
+function AdminAlertModal({ message, time, onSendReply, onClose }) {
+  const [replyText, setReplyText] = useState('');
+  const [sent, setSent] = useState(false);
+
+  const quickReplies = [
+    'Dạ em đã rõ, em xin lỗi ạ!',
+    'Dạ thiết bị em bị giật lag / mạng chập chờn ạ',
+    'Dạ em lỡ chạm nhầm màn hình ạ',
+    'Dạ em đang hoàn thành nốt bài ạ'
+  ];
+
+  const handleSend = (textToSend) => {
+    const finalMsg = textToSend || replyText;
+    if (!finalMsg.trim()) return;
+    setSent(true);
+    onSendReply(finalMsg.trim());
+    setTimeout(() => {
+      onClose();
+    }, 1200);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[999999] bg-slate-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-slate-900 border-2 border-indigo-500/60 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-5 animate-in slide-in-from-bottom duration-300 text-slate-100">
+        
+        {/* Header */}
+        <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+            <MessageSquare className="w-6 h-6 animate-pulse" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-widest bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+              Cảnh Báo Từ Giám Thị
+            </span>
+            <h3 className="text-base font-extrabold text-white line-clamp-1 mt-0.5">Thông Báo Trực Tiếp</h3>
+          </div>
+        </div>
+
+        {/* Message Box */}
+        <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-4 space-y-2">
+          <p className="text-sm font-semibold text-slate-200 leading-relaxed whitespace-pre-wrap">
+            "{message}"
+          </p>
+          <span className="text-[10px] font-bold text-slate-500 block text-right">
+            Gửi lúc: {time || 'Vừa xong'}
+          </span>
+        </div>
+
+        {sent ? (
+          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 text-center text-emerald-400 font-bold text-sm space-y-1">
+            <CheckCircle2 className="w-6 h-6 mx-auto mb-1 text-emerald-400 animate-bounce" />
+            <span>Đã gửi phản hồi thành công đến Giám thị!</span>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider block">
+              ⚡ Phản Hồi Nhanh (Respond Nhanh):
+            </span>
+            
+            {/* Quick response buttons */}
+            <div className="grid grid-cols-1 gap-2">
+              {quickReplies.map((reply, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSend(reply)}
+                  className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold
+                             bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 text-slate-200
+                             active:scale-[0.98] transition-all flex items-center justify-between group"
+                >
+                  <span>💬 {reply}</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300" />
+                </button>
+              ))}
+            </div>
+
+            {/* Custom Reply */}
+            <div className="pt-2 border-t border-slate-800 flex gap-2">
+              <input
+                type="text"
+                value={replyText}
+                onChange={e => setReplyText(e.target.value)}
+                placeholder="Nhập nội dung phản hồi tùy chọn..."
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-medium"
+              />
+              <button
+                onClick={() => handleSend(replyText)}
+                disabled={!replyText.trim()}
+                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shrink-0 transition-all active:scale-95 border-transparent"
+              >
+                <Send className="w-3.5 h-3.5" />
+                Gửi
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="w-full py-2.5 rounded-xl border border-slate-700 text-slate-400 hover:text-white font-bold text-xs active:scale-95 transition-all"
+        >
+          Đóng cửa sổ
+        </button>
+
+      </div>
     </div>
   );
 }
