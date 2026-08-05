@@ -677,10 +677,10 @@ export default function ClientDashboard() {
                       </div>
                       <div className="flex gap-4 text-xs text-slate-400 dark:text-slate-500 mt-1.5 font-medium">
                         <span className="flex items-center gap-1">
-                          <FileText className="h-3.5 w-3.5" /> {ex.questions?.length || 0} câu hỏi
+                          <FileText className="h-3.5 w-3.5" /> {ex.questions?.length ?? ex.questionCount ?? 0} câu hỏi
                         </span>
                         <span className="flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" /> ~{Math.round((ex.questions?.length || 0) * 1.5)} phút
+                          <Clock className="h-3.5 w-3.5" /> ~{ex.config?.time || ex.config?.timeLimit || Math.max(5, Math.round((ex.questions?.length ?? ex.questionCount ?? 0) * 1.5))} phút
                         </span>
                       </div>
                     </div>

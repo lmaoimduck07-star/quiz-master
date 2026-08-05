@@ -116,26 +116,40 @@ async function loadSubjects() {
   try {
     const snap = await getDocs(collection(db, 'subjectsV2'));
     const examsSnap = await getDocs(collection(db, 'examsV2'));
-    const allExams = examsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    
+    const allExams = await Promise.all(
+      examsSnap.docs.map(async d => {
+        const ex = { id: d.id, ...d.data() };
+        let count = ex.questionCount;
+        if (count === undefined) {
+          try {
+            const qSnap = await getDocs(collection(db, 'examsV2', d.id, 'questions'));
+            count = qSnap.size;
+          } catch {
+            count = 0;
+          }
+        }
+        const timeConfig = ex.config?.time || Math.max(5, Math.round(count * 1.5));
+        const config = ex.config ? { ...ex.config, time: ex.config.time || timeConfig } : {
+          title: ex.title || 'Đề luyện tập',
+          time: timeConfig,
+          password: '',
+          shuffleQ: true,
+          shuffleA: true
+        };
+        return {
+          ...ex,
+          config,
+          questionCount: count,
+          questions: new Array(count).fill(null)
+        };
+      })
+    );
 
     const subjects = snap.docs.map(d => {
       const data = { id: d.id, ...d.data() };
       if (!data.status) data.status = 'normal';
-      const subjExams = allExams.filter(e => e.subjectId === d.id).map(ex => {
-        if (!ex.config) {
-          return {
-            ...ex,
-            config: {
-              title: ex.title || 'Đề luyện tập',
-              time: ex.time || 15,
-              password: '',
-              shuffleQ: true,
-              shuffleA: true
-            }
-          };
-        }
-        return ex;
-      });
+      const subjExams = allExams.filter(e => e.subjectId === d.id);
       return { ...data, exams: subjExams };
     });
     return subjects;
@@ -670,7 +684,34 @@ function subscribeSubjects(callback) {
   return onSnapshot(collection(db, 'subjectsV2'), async (snap) => {
     try {
       const examsSnap = await getDocs(collection(db, 'examsV2'));
-      const allExams = examsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const allExams = await Promise.all(
+        examsSnap.docs.map(async d => {
+          const ex = { id: d.id, ...d.data() };
+          let count = ex.questionCount;
+          if (count === undefined) {
+            try {
+              const qSnap = await getDocs(collection(db, 'examsV2', d.id, 'questions'));
+              count = qSnap.size;
+            } catch {
+              count = 0;
+            }
+          }
+          const timeConfig = ex.config?.time || Math.max(5, Math.round(count * 1.5));
+          const config = ex.config ? { ...ex.config, time: ex.config.time || timeConfig } : {
+            title: ex.title || 'Đề luyện tập',
+            time: timeConfig,
+            password: '',
+            shuffleQ: true,
+            shuffleA: true
+          };
+          return {
+            ...ex,
+            config,
+            questionCount: count,
+            questions: new Array(count).fill(null)
+          };
+        })
+      );
       const data = snap.docs.map(d => {
         const subjData = { id: d.id, ...d.data() };
         const subjExams = allExams.filter(e => e.subjectId === d.id);

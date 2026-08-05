@@ -101,7 +101,7 @@ export async function saveQuestionsV2(examId, questions) {
     const batch = writeBatch(db);
     const qCol = collection(db, 'examsV2', examId, 'questions');
     
-    // 1. Get existing to delete removed ones (optional, simple overwrite for now)
+    // 1. Get existing to delete removed ones
     const existing = await getDocs(qCol);
     existing.forEach(d => batch.delete(d.ref));
     
@@ -110,6 +110,10 @@ export async function saveQuestionsV2(examId, questions) {
       const qRef = doc(qCol, q.id);
       batch.set(qRef, q);
     });
+
+    // 3. Update questionCount on exam document
+    const examRef = doc(db, 'examsV2', examId);
+    batch.set(examRef, { questionCount: questions.length }, { merge: true });
     
     await batch.commit();
   } catch (e) {
