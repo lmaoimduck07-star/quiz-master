@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { X, Shuffle, Flame } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { storageV2 } from '../../utils/storageV2';
 
-export default function RandomExamModal({ isOpen, onClose, subject, onUpdateSubject }) {
+export default function RandomExamModal({ isOpen, onClose, subject, exams, onUpdateSubject }) {
   const [selectedExamIds, setSelectedExamIds] = useState([]);
   const [questionCount, setQuestionCount] = useState(50);
   const [examTitle, setExamTitle] = useState('');
@@ -13,27 +14,20 @@ export default function RandomExamModal({ isOpen, onClose, subject, onUpdateSubj
     if (isOpen) {
       document.body.style.overflow = 'hidden';
       // Mặc định chọn tất cả đề thi hiện có
-      const allIds = (subject.exams || []).map(e => e.id);
+      const allIds = (exams || []).map(e => e.id);
       setSelectedExamIds(allIds);
       setExamTitle(`Đề Thi Tổng Hợp Ngẫu Nhiên - ${subject.name}`);
       setExamTime(60);
-      
-      // Tính tổng số câu hỏi từ các đề
-      const totalQ = (subject.exams || []).reduce((sum, e) => sum + (e.questions || []).length, 0);
-      setQuestionCount(Math.min(50, totalQ));
+      setQuestionCount(50);
     } else {
       document.body.style.overflow = 'unset';
     }
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen, subject]);
+  }, [isOpen, subject, exams]);
 
   if (!isOpen) return null;
-
-  // Tính số câu hỏi tối đa dựa trên các đề đã chọn
-  const selectedExams = (subject.exams || []).filter(e => selectedExamIds.includes(e.id));
-  const totalAvailableQuestions = selectedExams.reduce((sum, e) => sum + (e.questions || []).length, 0);
 
   const handleToggleExam = (id) => {
     let newSelection;
@@ -43,29 +37,15 @@ export default function RandomExamModal({ isOpen, onClose, subject, onUpdateSubj
       newSelection = [...selectedExamIds, id];
     }
     setSelectedExamIds(newSelection);
-
-    // Cập nhật lại số câu hỏi mong muốn nếu nó lớn hơn số câu hỏi khả dụng mới
-    const newTotal = (subject.exams || [])
-      .filter(e => newSelection.includes(e.id))
-      .reduce((sum, e) => sum + (e.questions || []).length, 0);
-    
-    if (questionCount > newTotal) {
-      setQuestionCount(newTotal);
-    } else if (questionCount === 0 && newTotal > 0) {
-      setQuestionCount(Math.min(50, newTotal));
-    }
   };
 
   const handleSelectAll = () => {
-    const allIds = (subject.exams || []).map(e => e.id);
+    const allIds = (exams || []).map(e => e.id);
     setSelectedExamIds(allIds);
-    const totalQ = (subject.exams || []).reduce((sum, e) => sum + (e.questions || []).length, 0);
-    setQuestionCount(Math.min(50, totalQ));
   };
 
   const handleDeselectAll = () => {
     setSelectedExamIds([]);
-    setQuestionCount(0);
   };
 
   // Thuật toán xáo trộn Fisher-Yates
@@ -78,7 +58,7 @@ export default function RandomExamModal({ isOpen, onClose, subject, onUpdateSubj
     return arr;
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (selectedExamIds.length === 0) {
       alert("⚠️ Vui lòng chọn ít nhất một đề thi để lấy nguồn câu hỏi! (Mã lỗi: EXAM-12)");
       return;
@@ -89,27 +69,27 @@ export default function RandomExamModal({ isOpen, onClose, subject, onUpdateSubj
       return;
     }
 
-    if (questionCount > totalAvailableQuestions) {
-      alert(`⚠️ Số lượng câu hỏi yêu cầu (${questionCount}) vượt quá tổng số câu hỏi hiện có (${totalAvailableQuestions})! (Mã lỗi: EXAM-14)`);
-      return;
-    }
-
     if (!examTitle.trim()) {
       alert("⚠️ Vui lòng nhập tiêu đề cho đề thi mới! (Mã lỗi: EXAM-15)");
       return;
     }
 
-    // Gom tất cả câu hỏi từ các đề thi đã chọn
+    // Tải toàn bộ câu hỏi từ các đề đã chọn (Bất đồng bộ)
     let allQuestions = [];
-    selectedExams.forEach(exam => {
-      if (exam.questions) {
-        // Sao chép sâu hoặc cẩn thận để tránh tham chiếu gốc
-        allQuestions.push(...exam.questions.map(q => ({ ...q })));
+    for (const eid of selectedExamIds) {
+      const qs = await storageV2.loadQuestionsV2(eid);
+      if (qs && qs.length > 0) {
+        allQuestions.push(...qs.map(q => ({ ...q })));
       }
-    });
+    }
 
     if (allQuestions.length === 0) {
       alert("⚠️ Không tìm thấy câu hỏi nào trong các đề thi được chọn! (Mã lỗi: EXAM-16)");
+      return;
+    }
+
+    if (questionCount > allQuestions.length) {
+      alert(`⚠️ Số lượng câu hỏi yêu cầu (${questionCount}) vượt quá tổng số câu hỏi hiện có (${allQuestions.length})! (Mã lỗi: EXAM-14)`);
       return;
     }
 
@@ -118,8 +98,11 @@ export default function RandomExamModal({ isOpen, onClose, subject, onUpdateSubj
     const selectedQuestions = shuffledQuestions.slice(0, questionCount);
 
     // Tạo đề thi mới
+    const newExamId = 'ex_' + Date.now();
     const newExam = {
-      id: 'ex_' + Date.now(),
+      id: newExamId,
+      subjectId: subject.id,
+      title: examTitle.trim(),
       config: {
         title: examTitle.trim(),
         time: parseInt(examTime) || 0,
@@ -129,13 +112,12 @@ export default function RandomExamModal({ isOpen, onClose, subject, onUpdateSubj
         encrypt: false,
         limitAttempts: 0,
         strictMode: false
-      },
-      questions: selectedQuestions
+      }
     };
 
-    // Lưu đề mới vào subject
-    const updatedExams = [newExam, ...(subject.exams || [])];
-    onUpdateSubject({ ...subject, exams: updatedExams });
+    // Lưu đề mới vào DB
+    await storageV2.saveExamV2(newExam);
+    await storageV2.saveQuestionsV2(newExamId, selectedQuestions);
 
     alert(`🎲 Tạo đề thi ngẫu nhiên gồm ${questionCount} câu thành công!`);
     onClose();
@@ -178,16 +160,15 @@ export default function RandomExamModal({ isOpen, onClose, subject, onUpdateSubj
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <label className="block text-slate-700 dark:text-slate-300 font-bold mb-2 text-sm uppercase tracking-wider">
-              Số câu hỏi ({totalAvailableQuestions} khả dụng)
+              Số câu hỏi
             </label>
             <Input 
               type="number"
               min="1"
-              max={totalAvailableQuestions}
               value={questionCount}
               onChange={(e) => {
                 const val = parseInt(e.target.value) || 0;
-                setQuestionCount(Math.min(val, totalAvailableQuestions));
+                setQuestionCount(val);
               }}
               className="w-full text-center font-bold text-slate-800 dark:text-slate-100 bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800"
             />
@@ -232,36 +213,30 @@ export default function RandomExamModal({ isOpen, onClose, subject, onUpdateSubj
             </div>
           </div>
 
-          <div className="max-h-48 overflow-y-auto border border-slate-100 dark:border-slate-800 rounded-2xl p-4 bg-slate-50/50 dark:bg-slate-950/40 flex flex-col gap-2 transition-colors">
-            {(!subject.exams || subject.exams.length === 0) ? (
-              <div className="text-center text-slate-400 dark:text-slate-500 py-6 font-semibold">
-                Không tìm thấy đề thi nào trong môn này.
+          <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+            {(exams || []).map(exam => (
+              <label 
+                key={exam.id} 
+                className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selectedExamIds.includes(exam.id) ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/20' : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
+              >
+                <input 
+                  type="checkbox"
+                  checked={selectedExamIds.includes(exam.id)}
+                  onChange={() => handleToggleExam(exam.id)}
+                  className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-slate-800 dark:text-slate-200 truncate">
+                    {exam.config?.title || exam.title}
+                  </div>
+                </div>
+              </label>
+            ))}
+            
+            {(!exams || exams.length === 0) && (
+              <div className="text-center p-6 text-slate-500 dark:text-slate-400 italic bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                Môn này chưa có đề thi nào.
               </div>
-            ) : (
-              subject.exams.map(exam => {
-                const qLen = (exam.questions || []).length;
-                return (
-                  <label 
-                    key={exam.id}
-                    className="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer transition select-none shadow-sm transition-colors bg-transparent"
-                  >
-                    <div className="flex items-center gap-3">
-                      <input 
-                        type="checkbox"
-                        checked={selectedExamIds.includes(exam.id)}
-                        onChange={() => handleToggleExam(exam.id)}
-                        className="w-5 h-5 accent-indigo-600 dark:accent-indigo-400 cursor-pointer"
-                      />
-                      <span className="font-bold text-slate-700 dark:text-slate-300 text-sm">
-                        {exam.config.title}
-                      </span>
-                    </div>
-                    <span className="text-xs bg-slate-100 dark:bg-slate-850 text-slate-500 dark:text-slate-450 font-bold px-2.5 py-1 rounded-lg transition-colors">
-                      {qLen} câu
-                    </span>
-                  </label>
-                );
-              })
             )}
           </div>
         </div>

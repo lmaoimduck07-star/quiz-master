@@ -1,11 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ExamCard from './ExamCard';
 import RandomExamModal from './RandomExamModal';
 import { ArrowLeft, Check, Dices, Download, Folder, Plus, Pencil } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { storageV2 } from '../../utils/storageV2';
 
 export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEditor, onPlayExam }) {
   const [isRandomModalOpen, setIsRandomModalOpen] = useState(false);
+  const [exams, setExams] = useState([]);
+
+  useEffect(() => {
+    const unsub = storageV2.subscribeExamsV2(subject.id, setExams);
+    return () => { if (typeof unsub === 'function') unsub(); }
+  }, [subject.id]);
   
   const handleRenameSubject = () => {
     const newName = prompt("Nhập tên mới cho môn học này:", subject.name);
@@ -15,19 +22,19 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
   };
 
   // Hàm xử lý việc xóa đề thi
-  const handleDeleteExam = (examId) => {
+  const handleDeleteExam = async (examId) => {
     if (confirm("Bạn có chắc chắn muốn xóa đề thi này không?")) {
-      const newExams = subject.exams.filter(e => e.id !== examId);
-      // Gửi Cấu trúc Môn học mới (chứa mảng exams đã bị xóa) lên App.jsx
-      onUpdateSubject({ ...subject, exams: newExams });
+      await storageV2.deleteExamV2(examId);
     }
   };
 
   // Hàm xử lý chung cho Edit: Nếu có newConfig (Title mới) thì update ngay, nếu không thì mở màn hình Editor
-  const handleEditExam = (examId, newConfig) => {
+  const handleEditExam = async (examId, newConfig) => {
     if (newConfig) {
-      const newExams = subject.exams.map(e => e.id === examId ? { ...e, config: newConfig } : e);
-      onUpdateSubject({ ...subject, exams: newExams });
+      const exam = exams.find(e => e.id === examId);
+      if (exam) {
+        await storageV2.saveExamV2({ ...exam, config: newConfig });
+      }
     } else {
       onOpenEditor(examId);
     }
@@ -123,8 +130,13 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
     }
 
     if (importedExams.length > 0) {
-      const newExams = [...(subject.exams || []), ...importedExams];
-      onUpdateSubject({ ...subject, exams: newExams });
+      for (const ex of importedExams) {
+        const { questions, ...examMeta } = ex;
+        await storageV2.saveExamV2(examMeta);
+        if (questions && questions.length > 0) {
+          await storageV2.saveQuestionsV2(examMeta.id, questions);
+        }
+      }
     }
 
     let successMsg = importedExams.length > 0 ? `✅ Đã nhập thành công ${importedExams.length} đề thi!\n` : '';
@@ -216,13 +228,13 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
 
       {/* Render Lưới chứa Đề Thi */}
       <div className="flex flex-col gap-5">
-        {!subject.exams || subject.exams.length === 0 ? (
+        {!exams || exams.length === 0 ? (
           <div className="text-center p-16 border-2 border-dashed border-slate-300 dark:border-slate-800 rounded-3xl text-slate-500 dark:text-slate-400 font-semibold bg-slate-50 dark:bg-slate-900/50 text-lg transition-colors">
             Môn học này chưa có đề thi nào. Hãy bấm nút Soạn Đề bên trên!
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {subject.exams.map(exam => (
+            {exams.map(exam => (
               <ExamCard 
                 key={exam.id} 
                 exam={exam} 

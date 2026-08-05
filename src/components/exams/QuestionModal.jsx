@@ -319,6 +319,60 @@ export default function QuestionModal({ isOpen, questionData, onSave, onClose })
       </div>
     );
   }
+  // ===== ĐÚNG / SAI — toggle chọn đáp án đúng =====
+  else if (formData.type === 'truefalse') {
+    dynamicBody = (
+      <div className="mt-6 border-t pt-6">
+        <label className="block text-xs font-bold text-slate-500 uppercase mb-4 tracking-widest">
+          Đáp Án Đúng Của Câu Hỏi Này
+        </label>
+        <div className="grid grid-cols-2 gap-4">
+          {/* Nút ĐÚNG */}
+          <button
+            type="button"
+            onClick={() => setFormData({ ...formData, correct: true })}
+            className={`flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border-2 font-black text-lg transition-all duration-150 ${
+              formData.correct === true
+                ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-md scale-[1.02]'
+                : 'border-slate-200 bg-white text-slate-400 hover:border-emerald-300 hover:bg-emerald-50/50 hover:text-emerald-500'
+            }`}
+          >
+            <span className="text-4xl">{formData.correct === true ? '✅' : '⬜'}</span>
+            <span>ĐÚNG</span>
+            {formData.correct === true && (
+              <span className="text-xs font-bold bg-emerald-500 text-white px-3 py-0.5 rounded-full">Đáp án được chọn</span>
+            )}
+          </button>
+
+          {/* Nút SAI */}
+          <button
+            type="button"
+            onClick={() => setFormData({ ...formData, correct: false })}
+            className={`flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border-2 font-black text-lg transition-all duration-150 ${
+              formData.correct === false
+                ? 'border-red-500 bg-red-50 text-red-700 shadow-md scale-[1.02]'
+                : 'border-slate-200 bg-white text-slate-400 hover:border-red-300 hover:bg-red-50/50 hover:text-red-500'
+            }`}
+          >
+            <span className="text-4xl">{formData.correct === false ? '❌' : '⬜'}</span>
+            <span>SAI</span>
+            {formData.correct === false && (
+              <span className="text-xs font-bold bg-red-500 text-white px-3 py-0.5 rounded-full">Đáp án được chọn</span>
+            )}
+          </button>
+        </div>
+
+        {/* Hiển thị đáp án hiện tại */}
+        <div className={`mt-4 p-3 rounded-xl text-sm font-bold text-center ${
+          formData.correct === true
+            ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+            : 'bg-red-50 border border-red-200 text-red-700'
+        }`}>
+          Đáp án hiện tại: <strong>{formData.correct === true ? '✅ ĐÚNG' : '❌ SAI'}</strong>
+        </div>
+      </div>
+    );
+  }
   else {
     dynamicBody = <div className="mt-6 border-t pt-6 text-center text-amber-600 font-bold bg-amber-50 p-4 rounded-xl border border-amber-200">🚧 Vui lòng sử dụng tính năng xóa và tạo mới cho các dạng kéo thả.</div>;
   }

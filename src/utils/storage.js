@@ -399,8 +399,15 @@ async function addAuditLog(log) {
 // ─────────────────────────────────────────────
 async function saveExamResult(result) {
   try {
+    // Lọc undefined values để tránh lỗi Firestore
+    const sanitized = Object.fromEntries(
+      Object.entries(result).filter(([, v]) => v !== undefined)
+    );
+    // Không lưu mảng questions quá lớn lên Firestore để tránh vượt giới hạn 1MB
+    const { questions, ...resultWithoutQuestions } = sanitized;
     await addDoc(collection(db, 'examResults'), {
-      ...result,
+      ...resultWithoutQuestions,
+      questionCount: questions ? questions.length : 0,
       savedAt: serverTimestamp(),
     });
   } catch (e) {
@@ -418,6 +425,29 @@ async function loadExamResults(userId) {
   } catch (e) {
     console.error('[Storage] loadExamResults error:', e);
     return [];
+  }
+}
+
+// Real-time listener cho kết quả bài thi — dùng thay loadExamResults trong Dashboard
+function subscribeExamResults(userId, callback) {
+  try {
+    const q = query(
+      collection(db, 'examResults'),
+      orderBy('savedAt', 'desc'),
+      limit(100)
+    );
+    return onSnapshot(q, (snap) => {
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const filtered = userId ? all.filter(r => r.userId === userId) : all;
+      callback(filtered);
+    }, (err) => {
+      console.error('[Storage] subscribeExamResults error:', err);
+      callback([]);
+    });
+  } catch (e) {
+    console.error('[Storage] subscribeExamResults setup error:', e);
+    callback([]);
+    return () => {};
   }
 }
 
@@ -712,23 +742,34 @@ function subscribeAuditLogs(callback) {
 }
 
 function subscribeActiveSessions(callback) {
-  return onSnapshot(collection(db, 'active_sessions'), (snap) => {
+  return onSnapshot(collection(db, 'active_sessionsV2'), (snap) => {
     const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     callback(data);
   }, (err) => console.warn('[Storage] subscribeActiveSessions error:', err));
 }
 
-function subscribeExamResults(callback) {
-  const q = query(collection(db, 'examResults'), orderBy('savedAt', 'desc'), limit(200));
-  return onSnapshot(q, (snap) => {
-    const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    callback(data);
-  }, (err) => console.warn('[Storage] subscribeExamResults error:', err));
+// Lắng nghe ĐÚNG 1 document theo sessionId — Dùng cho SpectatorView, tốc độ < 50ms
+function subscribeSingleSession(sessionId, callback) {
+  if (!sessionId) { callback(null); return () => {}; }
+  const docRef = doc(db, 'active_sessionsV2', sessionId);
+  return onSnapshot(docRef, (docSnap) => {
+    if (docSnap.exists()) {
+      callback({ id: docSnap.id, ...docSnap.data() });
+    } else {
+      callback(null);
+    }
+  }, (err) => {
+    console.warn('[Storage] subscribeSingleSession error:', err);
+    callback(null);
+  });
 }
+
+// subscribeExamResults đã được định nghĩa ở trên với chữ ký (userId, callback)
+// AdminDashboard dùng không cần filter userId: storage.subscribeExamResults(null, callback)
 
 async function cleanStaleSessions() {
   try {
-    const snap = await getDocs(collection(db, 'active_sessions'));
+    const snap = await getDocs(collection(db, 'active_sessionsV2'));
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(); // 24h trước
     const batch = writeBatch(db);
     let count = 0;
@@ -749,22 +790,40 @@ async function cleanStaleSessions() {
   }
 }
 
+// ── Sanitize: loại bỏ undefined/NaN trước khi gửi lên Firestore ─────────────
+function sanitizeFirestoreData(obj) {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) return obj.map(sanitizeFirestoreData).filter(v => v !== null && v !== undefined);
+  if (typeof obj === 'object') {
+    const result = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (v === undefined) continue;
+      if (typeof v === 'number' && isNaN(v)) continue;
+      result[k] = (v !== null && typeof v === 'object') ? sanitizeFirestoreData(v) : v;
+    }
+    return result;
+  }
+  return obj;
+}
+
 async function updateActiveSession(sessionId, sessionData) {
   try {
     const nowIso = new Date().toISOString();
-    await setDoc(doc(db, 'active_sessions', sessionId), {
+    const safeData = sanitizeFirestoreData({
       ...sessionData,
       lastActive: nowIso,
       onlineSince: sessionData.onlineSince || nowIso
-    }, { merge: true });
+    });
+    await setDoc(doc(db, 'active_sessionsV2', sessionId), safeData, { merge: true });
   } catch (e) {
     console.warn('[Storage] updateActiveSession error:', e);
   }
 }
 
+
 async function terminateActiveSessionRemotely(sessionId) {
   try {
-    await updateDoc(doc(db, 'active_sessions', sessionId), {
+    await updateDoc(doc(db, 'active_sessionsV2', sessionId), {
       status: 'terminated',
       terminatedAt: new Date().toISOString()
     });
@@ -775,7 +834,7 @@ async function terminateActiveSessionRemotely(sessionId) {
 
 async function sendAdminAlertToStudent(sessionId, message) {
   try {
-    await updateDoc(doc(db, 'active_sessions', sessionId), {
+    await updateDoc(doc(db, 'active_sessionsV2', sessionId), {
       adminMessage: message,
       adminMessageTime: new Date().toISOString()
     });
@@ -786,20 +845,23 @@ async function sendAdminAlertToStudent(sessionId, message) {
 
 async function deleteActiveSessionRemotely(sessionId) {
   try {
-    const docRef = doc(db, 'active_sessions', sessionId);
+    const docRef = doc(db, 'active_sessionsV2', sessionId);
     await setDoc(docRef, { status: 'deleted', deletedAt: new Date().toISOString() }, { merge: true });
     setTimeout(async () => {
-      try { await deleteDoc(docRef); } catch (_) { }
-    }, 4000);
+      try {
+        await deleteDoc(docRef);
+      } catch (err) { }
+    }, 5000);
   } catch (e) {
     console.error('[Storage] deleteActiveSessionRemotely error:', e);
-    try { await deleteDoc(doc(db, 'active_sessions', sessionId)); } catch (_) { }
+    try { await deleteDoc(doc(db, 'active_sessionsV2', sessionId)); } catch (_) { }
   }
 }
 
 async function removeActiveSession(sessionId) {
+  if (!sessionId) return;
   try {
-    await deleteDoc(doc(db, 'active_sessions', sessionId));
+    await deleteDoc(doc(db, 'active_sessionsV2', sessionId));
   } catch (e) {
     console.warn('[Storage] removeActiveSession error:', e);
   }
@@ -830,6 +892,7 @@ export const storage = {
   subscribeUsers,
   subscribeAuditLogs,
   subscribeActiveSessions,
+  subscribeSingleSession,
   subscribeExamResults,
   cleanStaleSessions,
   updateActiveSession,

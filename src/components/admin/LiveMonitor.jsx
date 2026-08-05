@@ -1,12 +1,14 @@
 // src/components/admin/LiveMonitor.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { storage } from '../../utils/storage';
 import { Button } from '../ui/Button';
 import { Card, CardContent } from '../ui/Card';
 import {
   Activity, Clock, ShieldAlert, AlertTriangle, Lock, MessageSquare,
   BookOpen, UserCheck, RefreshCw, Eye, Search, X, CheckCircle, FileText,
-  Code2, Users, Radio, Monitor, Send, Trash2, Copy, ChevronDown, LayoutGrid
+  Code2, Users, Radio, Monitor, Send, Trash2, Copy, ChevronDown, LayoutGrid,
+  CheckCircle2, Flag
 } from 'lucide-react';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -296,8 +298,9 @@ export default function LiveMonitor() {
     return () => clearInterval(timer);
   }, []);
 
-  // Subscribe Firestore realtime
+  // Subscribe Firestore realtime & dọn rác session cũ > 24h khi mount
   useEffect(() => {
+    storage.cleanStaleSessions(); // Tự động xóa session rác cũ > 24h
     setLoading(true);
     const unsubscribe = storage.subscribeActiveSessions((data) => {
       const rawList = data || [];
@@ -373,8 +376,9 @@ export default function LiveMonitor() {
     setActionModal(null);
   };
 
-  // ── Phân loại sessions ──
-  const PRESENCE_TIMEOUT_MS = 45000;
+  // ── Mịch (Đồng hồ nhừng c) ──
+  const PRESENCE_TIMEOUT_MS = 45000; // 45s không có heartbeat = Mất kết nối
+  const ABANDONED_STATUS = 'abandoned';
   const nowTime = Date.now();
 
   const presenceSessions = sessions.filter(s => {
@@ -387,12 +391,22 @@ export default function LiveMonitor() {
 
   const examSessions = sessions.filter(s => s.mode !== 'presence' && !s.id?.startsWith('presence_') && s.status !== 'deleted');
 
+  // Helper: kiểm tra session có bị mất kết nối không
+  const isDisconnected = (s) => {
+    if (s.status === 'terminated' || s.status === 'submitted' || s.status === ABANDONED_STATUS) return false;
+    if (!s.lastActive) return false;
+    const lastMs = new Date(s.lastActive).getTime();
+    return !isNaN(lastMs) && (nowTime - lastMs) > PRESENCE_TIMEOUT_MS;
+  };
+
   // ── Metrics ──
   const onlineAccountsCount = presenceSessions.length;
-  const activeExamsCount = examSessions.filter(s => s.status !== 'terminated' && s.status !== 'submitted').length;
+  const activeExamsCount = examSessions.filter(s => s.status !== 'terminated' && s.status !== 'submitted' && s.status !== ABANDONED_STATUS && !isDisconnected(s)).length;
   const warningCountTotal = examSessions.filter(s => (s.warningCount || 0) > 0 && s.status !== 'terminated').length;
   const terminatedCount = examSessions.filter(s => s.status === 'terminated').length;
   const submittedCount = examSessions.filter(s => s.status === 'submitted').length;
+  const abandonedCount = examSessions.filter(s => s.status === ABANDONED_STATUS).length;
+  const disconnectedCount = examSessions.filter(s => isDisconnected(s)).length;
 
   // ── Unique exam titles for filter dropdown ──
   const uniqueExamTitles = [...new Set(
@@ -407,9 +421,11 @@ export default function LiveMonitor() {
     if (query && !studentName.includes(query) && !title.includes(query)) return false;
     if (filterExamTitle && (s.examTitle || s.title) !== filterExamTitle) return false;
     if (filterType === 'warning') return (s.warningCount || 0) > 0 && s.status !== 'terminated';
-    if (filterType === 'active') return s.status !== 'terminated' && s.status !== 'submitted';
+    if (filterType === 'active') return s.status !== 'terminated' && s.status !== 'submitted' && s.status !== ABANDONED_STATUS && !isDisconnected(s);
     if (filterType === 'terminated') return s.status === 'terminated';
     if (filterType === 'submitted') return s.status === 'submitted';
+    if (filterType === 'abandoned') return s.status === ABANDONED_STATUS;
+    if (filterType === 'disconnected') return isDisconnected(s);
     return true;
   });
 
@@ -661,6 +677,26 @@ export default function LiveMonitor() {
               ⚠️ Vi phạm ({warningCountTotal})
             </button>
             <button
+              onClick={() => setFilterType('abandoned')}
+              className={`text-xs font-bold h-8 px-3 rounded-lg border transition-all outline-none focus:ring-2 focus:ring-offset-1 focus:ring-orange-400 ${
+                filterType === 'abandoned'
+                  ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-orange-600 dark:text-orange-400 border-orange-300 dark:border-orange-800 hover:border-orange-500'
+              }`}
+            >
+              🚪 Rời phòng ({abandonedCount})
+            </button>
+            <button
+              onClick={() => setFilterType('disconnected')}
+              className={`text-xs font-bold h-8 px-3 rounded-lg border transition-all outline-none focus:ring-2 focus:ring-offset-1 focus:ring-slate-400 ${
+                filterType === 'disconnected'
+                  ? 'bg-slate-600 text-white border-slate-600 shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-slate-500'
+              }`}
+            >
+              📡 Mất kết nối ({disconnectedCount})
+            </button>
+            <button
               onClick={() => setFilterType('submitted')}
               className={`text-xs font-bold h-8 px-3 rounded-lg border transition-all outline-none focus:ring-2 focus:ring-offset-1 focus:ring-purple-400 ${
                 filterType === 'submitted'
@@ -703,6 +739,8 @@ export default function LiveMonitor() {
               const warnings = session.warningCount || 0;
               const isTerminated = session.status === 'terminated';
               const isSubmitted = session.status === 'submitted';
+              const isAbandoned = session.status === 'abandoned';
+              const isLost = isDisconnected(session);
               const isCoding = session.mode === 'coding';
               const modeConfig = getModeConfig(session.mode);
               const sinceTime = formatTime(session.onlineSince || session.lastActive);
@@ -714,9 +752,13 @@ export default function LiveMonitor() {
                   className={`border-2 rounded-3xl overflow-hidden transition shadow-sm ${
                     isTerminated
                       ? 'border-red-400 bg-red-50/30 dark:bg-red-950/20'
-                      : warnings > 0
-                        ? 'border-amber-400 bg-amber-50/20 dark:bg-amber-950/20'
-                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+                      : isAbandoned
+                        ? 'border-orange-400 bg-orange-50/20 dark:bg-orange-950/20'
+                        : isLost
+                          ? 'border-slate-400 bg-slate-50/30 dark:bg-slate-800/30'
+                          : warnings > 0
+                            ? 'border-amber-400 bg-amber-50/20 dark:bg-amber-950/20'
+                            : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
                   }`}
                 >
                   <CardContent className="p-5 space-y-3.5">
@@ -737,6 +779,12 @@ export default function LiveMonitor() {
                           <span className="text-[10px] font-black uppercase tracking-wider bg-red-500 text-white px-2 py-0.5 rounded-lg shadow-sm">🔒 Khóa</span>
                         ) : isSubmitted ? (
                           <span className="text-[10px] font-black uppercase tracking-wider bg-purple-500 text-white px-2 py-0.5 rounded-lg shadow-sm">✓ Nộp</span>
+                        ) : isAbandoned ? (
+                          <span className="text-[10px] font-black uppercase tracking-wider bg-orange-500 text-white px-2 py-0.5 rounded-lg shadow-sm">🚪 Rời phòng</span>
+                        ) : isLost ? (
+                          <span className="text-[10px] font-black uppercase tracking-wider bg-slate-500 text-white px-2 py-0.5 rounded-lg shadow-sm flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-pulse" />📡 Mất KN
+                          </span>
                         ) : (
                           <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded-lg flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" /> Live
@@ -803,6 +851,23 @@ export default function LiveMonitor() {
                       >
                         <Eye className="h-3.5 w-3.5" /> Xem chi tiết
                       </Button>
+                      {/* Nút Xem Trực Tiếp (Admin Spectator) — chỉ hiện khi session còn active */}
+                      {!isTerminated && !isSubmitted && session.id && (
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            // Lưu snapshot session hiện tại vào sessionStorage để SpectatorView render ngay 0ms
+                            try {
+                              sessionStorage.setItem(`qm_spec_${session.id}`, JSON.stringify(session));
+                            } catch {}
+                            window.open(`/admin/spectate/${session.id}`, '_blank');
+                          }}
+                          className="font-bold text-xs h-9 px-3 rounded-xl border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 bg-transparent flex items-center justify-center gap-1"
+                          title="Xem trực tiếp bài làm (Read-Only)"
+                        >
+                          <Eye className="h-3.5 w-3.5" /> Live
+                        </Button>
+                      )}
                       {!isTerminated && !isSubmitted && (
                         <>
                           <Button
@@ -837,61 +902,137 @@ export default function LiveMonitor() {
       {selectedSessionDetail && (() => {
         const s = selectedSessionDetail;
         const isTerminated = s.status === 'terminated';
-        const isSubmitted = s.status === 'submitted';
-        const modeConfig = getModeConfig(s.mode);
+        const isSubmitted  = s.status === 'submitted';
+        const isLost       = isDisconnected(s);
+        const modeConfig   = getModeConfig(s.mode);
         const answeredCount = s.answeredCount || 0;
-        const totalQ = s.totalQuestions || 1;
-        const percent = Math.min(100, Math.round((answeredCount / totalQ) * 100));
-        const flaggedCount = s.answeredGrid
+        const totalQ        = s.totalQuestions || 1;
+        const percent       = Math.min(100, Math.round((answeredCount / totalQ) * 100));
+        const flaggedCount  = s.answeredGrid
           ? Object.values(s.answeredGrid).filter(v => v === 'flagged').length
           : 0;
+        const warnings = s.warningCount || 0;
+
+        const statusBadge = isTerminated
+          ? { text: 'Đã khóa',      dot: 'bg-red-500',      cls: 'text-red-400 bg-red-500/10 border-red-500/30' }
+          : isSubmitted
+            ? { text: 'Đã nộp',     dot: 'bg-purple-500',   cls: 'text-purple-400 bg-purple-500/10 border-purple-500/30' }
+            : isLost
+              ? { text: 'Mất KN',   dot: 'bg-slate-500',    cls: 'text-slate-400 bg-slate-500/10 border-slate-500/30' }
+              : { text: 'Đang thi', dot: 'bg-emerald-500',  cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30 animate-pulse' };
 
         const TABS = [
           { id: 'overview', label: 'Tổng quan', icon: <Monitor className="h-3.5 w-3.5" /> },
-          { id: 'grid', label: 'Ma trận', icon: <LayoutGrid className="h-3.5 w-3.5" /> },
-          { id: 'logs', label: 'Nhật ký', icon: <Activity className="h-3.5 w-3.5" /> },
-          { id: 'raw', label: 'Raw JSON', icon: <Code2 className="h-3.5 w-3.5" /> },
+          { id: 'grid',     label: 'Ma trận',   icon: <LayoutGrid className="h-3.5 w-3.5" /> },
+          { id: 'logs',     label: 'Nhật ký',   icon: <Activity className="h-3.5 w-3.5" /> },
+          { id: 'raw',      label: 'Raw JSON',  icon: <Code2 className="h-3.5 w-3.5" /> },
         ];
 
-        return (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-            <Card className="w-full max-w-2xl border-slate-800 bg-slate-900 text-slate-100 shadow-2xl rounded-3xl overflow-hidden animate-in zoom-in-95 duration-200">
-              {/* Modal Header */}
-              <div className="bg-slate-950 px-6 py-4 border-b border-slate-800 flex justify-between items-start gap-3">
-                <div className="min-w-0">
-                  <h3 className="text-base font-black text-white m-0 flex items-center gap-2 flex-wrap">
-                    <UserCheck className="h-5 w-5 text-emerald-400 shrink-0" />
-                    <span className="truncate">{s.studentName || s.userId}</span>
-                    <span className={`text-[9px] font-black uppercase tracking-wider border px-1.5 py-0.5 rounded-md ${modeConfig.color}`}>
-                      {modeConfig.icon} {modeConfig.label}
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-400 m-0 mt-0.5 truncate">{s.examTitle}</p>
+        // Chữ cái đầu tên học sinh làm avatar
+        const initials = (s.studentName || s.userId || '?').charAt(0).toUpperCase();
+
+        return createPortal(
+          <div
+            className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200"
+            onClick={e => { if (e.target === e.currentTarget) setSelectedSessionDetail(null); }}
+          >
+            <div className="w-full max-w-2xl bg-slate-900 border border-slate-700/60 text-slate-100 shadow-2xl rounded-3xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+
+              {/* ── Header ── */}
+              <div className="px-6 pt-6 pb-4 bg-gradient-to-b from-slate-800/60 to-slate-900 border-b border-slate-800">
+                <div className="flex items-start justify-between gap-3">
+                  {/* Avatar + info */}
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="relative shrink-0">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center font-black text-xl text-white shadow-lg shadow-blue-900/40">
+                        {initials}
+                      </div>
+                      {/* Status dot */}
+                      <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-slate-900 ${statusBadge.dot}`} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base font-black text-white m-0 truncate">
+                          {s.studentName || s.userId}
+                        </h3>
+                        <span className={`text-[9px] font-black uppercase tracking-wider border px-2 py-0.5 rounded-full shrink-0 ${modeConfig.color}`}>
+                          {modeConfig.icon} {modeConfig.label}
+                        </span>
+                        <span className={`text-[9px] font-black uppercase tracking-wider border px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 ${statusBadge.cls}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${statusBadge.dot}`} />
+                          {statusBadge.text}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 m-0 mt-0.5 truncate flex items-center gap-2">
+                        <span className="truncate">{s.examTitle}</span>
+                        {s.id && (
+                          <span className="font-mono text-[9px] text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded-md shrink-0 border border-slate-700">
+                            {s.id}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  {/* Controls */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={refreshDetail}
+                      className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
+                      title="Refresh"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setSelectedSessionDetail(null)}
+                      className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={refreshDetail}
-                    className="text-slate-400 hover:text-white transition p-1 hover:bg-slate-800 rounded-lg"
-                    title="Refresh dữ liệu"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </button>
-                  <button onClick={() => setSelectedSessionDetail(null)} className="text-slate-400 hover:text-white transition p-1 hover:bg-slate-800 rounded-lg">
-                    <X className="h-5 w-5" />
-                  </button>
+
+                {/* Hero stats row */}
+                <div className="grid grid-cols-3 gap-3 mt-5">
+                  {/* Time left */}
+                  <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3 text-center">
+                    <div className="text-xl font-black font-mono text-blue-400">
+                      {s.timeLeft != null ? formatTimeLeft(s.timeLeft) : '∞'}
+                    </div>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-0.5 flex items-center justify-center gap-1">
+                      <Clock className="h-3 w-3" /> Còn lại
+                    </div>
+                  </div>
+                  {/* Progress */}
+                  <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3 text-center">
+                    <div className={`text-xl font-black ${percent >= 80 ? 'text-emerald-400' : percent >= 40 ? 'text-blue-400' : 'text-slate-400'}`}>
+                      {answeredCount}<span className="text-slate-600 text-base">/{totalQ}</span>
+                    </div>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-0.5">
+                      Đã làm ({percent}%)
+                    </div>
+                  </div>
+                  {/* Warnings */}
+                  <div className={`border rounded-2xl p-3 text-center ${warnings > 0 ? 'bg-amber-950/30 border-amber-800/60' : 'bg-slate-950/60 border-slate-800'}`}>
+                    <div className={`text-xl font-black ${warnings > 0 ? 'text-amber-400' : 'text-slate-500'}`}>
+                      {warnings}
+                    </div>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-0.5 flex items-center justify-center gap-1">
+                      <ShieldAlert className="h-3 w-3" /> Vi phạm
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Tabs */}
-              <div className="flex border-b border-slate-800 bg-slate-950/50">
+              {/* ── Tabs ── */}
+              <div className="flex border-b border-slate-800 bg-slate-950/40 shrink-0">
                 {TABS.map(tab => (
                   <button
                     key={tab.id}
                     onClick={() => setDetailTab(tab.id)}
-                    className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold transition border-b-2 ${
+                    className={`flex items-center gap-1.5 px-5 py-3 text-xs font-bold transition border-b-2 ${
                       detailTab === tab.id
-                        ? 'border-blue-500 text-blue-400'
-                        : 'border-transparent text-slate-500 hover:text-slate-300'
+                        ? 'border-blue-500 text-blue-400 bg-blue-500/5'
+                        : 'border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800/40'
                     }`}
                   >
                     {tab.icon} {tab.label}
@@ -899,85 +1040,114 @@ export default function LiveMonitor() {
                 ))}
               </div>
 
-              <div className="p-6 space-y-5 max-h-[65vh] overflow-y-auto">
+              {/* ── Tab Content ── */}
+              <div className="p-5 space-y-4 overflow-y-auto flex-1">
 
                 {/* Tab: Tổng quan */}
                 {detailTab === 'overview' && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* Info grid */}
+                    <div className="grid grid-cols-2 gap-2.5">
                       {[
-                        { label: 'ID Phiên', value: s.id, mono: true },
-                        { label: 'Thời gian vào thi', value: formatTime(s.onlineSince || s.lastActive) },
-                        { label: 'Thời gian còn lại', value: s.timeLeft != null ? formatTimeLeft(s.timeLeft) : 'Tự do' },
-                        { label: 'Trạng thái', value: isTerminated ? '🔒 Đã khóa' : isSubmitted ? '✅ Đã nộp' : '🟢 Đang làm bài' },
-                        { label: 'Số câu đã làm', value: `${answeredCount} / ${totalQ} câu (${percent}%)` },
-                        { label: 'Câu gắn cờ', value: `${flaggedCount} câu` },
-                        { label: 'Vi phạm rời tab', value: `${s.warningCount || 0} lần` },
-                        s.codeLanguage ? { label: 'Ngôn ngữ', value: s.codeLanguage.toUpperCase() } : null,
-                      ].filter(Boolean).map(({ label, value, mono }) => (
-                        <div key={label} className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">{label}</div>
-                          <div className={`text-sm font-bold text-slate-200 break-all ${mono ? 'font-mono text-xs' : ''}`}>{value}</div>
+                        { label: 'Vào thi lúc',    value: formatTime(s.onlineSince || s.lastActive), icon: <Clock className="h-3.5 w-3.5 text-slate-500" /> },
+                        { label: 'Câu hiện tại',   value: s.currentQuestion ? `Câu ${s.currentQuestion}` : '—', icon: <Eye className="h-3.5 w-3.5 text-blue-400" /> },
+                        { label: 'Câu cắm cờ',     value: `${flaggedCount} câu`, icon: <Flag className="h-3.5 w-3.5 text-amber-400" /> },
+                        { label: 'Câu đã làm',     value: `${answeredCount} / ${totalQ}`, icon: <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> },
+                        s.codeLanguage
+                          ? { label: 'Ngôn ngữ', value: s.codeLanguage.toUpperCase(), icon: <Code2 className="h-3.5 w-3.5 text-purple-400" /> }
+                          : null,
+                      ].filter(Boolean).map(({ label, value, icon }) => (
+                        <div key={label} className="flex items-center gap-3 bg-slate-950/50 border border-slate-800 rounded-2xl px-4 py-3">
+                          <div className="shrink-0">{icon}</div>
+                          <div className="min-w-0">
+                            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</div>
+                            <div className="text-sm font-bold text-slate-200 truncate mt-0.5">{value}</div>
+                          </div>
                         </div>
                       ))}
                     </div>
 
-                    {/* Progress bar trong overview */}
+                    {/* Progress bar */}
                     {!s.mode?.includes('coding') && (
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-bold text-slate-400">
-                          <span>Tiến độ hoàn thành</span><span>{percent}%</span>
+                      <div className="space-y-2 bg-slate-950/50 border border-slate-800 rounded-2xl px-4 py-3">
+                        <div className="flex justify-between items-center text-xs font-bold">
+                          <span className="text-slate-400">Tiến độ hoàn thành</span>
+                          <span className={`font-black ${percent >= 80 ? 'text-emerald-400' : percent >= 40 ? 'text-blue-400' : 'text-slate-500'}`}>
+                            {percent}%
+                          </span>
                         </div>
-                        <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                          <div className="bg-blue-500 h-full rounded-full transition-all duration-300" style={{ width: `${percent}%` }} />
+                        <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${percent}%`,
+                              background: percent >= 80
+                                ? 'linear-gradient(90deg,#10b981,#34d399)'
+                                : percent >= 40
+                                  ? 'linear-gradient(90deg,#3b82f6,#60a5fa)'
+                                  : 'linear-gradient(90deg,#475569,#64748b)'
+                            }}
+                          />
                         </div>
                       </div>
                     )}
 
-                    {/* Action buttons ngay trong modal */}
+                    {/* Action buttons */}
                     {!isTerminated && !isSubmitted && (
-                      <div className="flex gap-2 pt-2 border-t border-slate-800">
+                      <div className="flex gap-2 pt-1">
                         <Button
                           variant="outline"
                           onClick={() => setActionModal({ type: 'sendMsg', session: s })}
-                          className="flex-1 font-bold text-xs h-9 rounded-xl border-amber-800 text-amber-400 hover:bg-amber-950/30 bg-transparent flex items-center justify-center gap-1.5"
+                          className="flex-1 font-bold text-xs h-10 rounded-xl border-amber-700/60 text-amber-400 hover:bg-amber-950/30 bg-transparent flex items-center justify-center gap-1.5"
                         >
                           <MessageSquare className="h-3.5 w-3.5" /> Gửi cảnh báo
                         </Button>
                         <Button
                           onClick={() => setActionModal({ type: 'terminate', session: s })}
-                          className="flex-1 font-bold text-xs h-9 rounded-xl bg-red-600 hover:bg-red-700 text-white border-transparent flex items-center justify-center gap-1.5"
+                          className="flex-1 font-bold text-xs h-10 rounded-xl bg-red-600 hover:bg-red-700 text-white border-transparent flex items-center justify-center gap-1.5 shadow-lg shadow-red-900/30"
                         >
                           <Lock className="h-3.5 w-3.5" /> Khóa bài thi
                         </Button>
                       </div>
                     )}
+                    {(isTerminated || isSubmitted) && (
+                      <div className={`text-center py-3 rounded-2xl border text-xs font-bold ${
+                        isTerminated
+                          ? 'bg-red-950/30 border-red-800/50 text-red-400'
+                          : 'bg-purple-950/30 border-purple-800/50 text-purple-400'
+                      }`}>
+                        {isTerminated ? '🔒 Bài thi đã bị khóa từ xa' : '✅ Học sinh đã nộp bài thành công'}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Tab: Ma trận câu hỏi */}
+                {/* Tab: Ma trận */}
                 {detailTab === 'grid' && (
                   <div className="space-y-3">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-2 m-0">
-                      <FileText className="h-4 w-4 text-blue-400" /> Ma trận ô câu hỏi Realtime
-                    </h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-2 m-0">
+                        <LayoutGrid className="h-4 w-4 text-blue-400" /> Ma trận câu hỏi realtime
+                      </h4>
+                      <span className="text-[10px] font-bold text-slate-500">{totalQ} câu · {answeredCount} đã làm</span>
+                    </div>
                     {s.answeredGrid ? (
                       <>
-                        <div className="flex flex-wrap gap-2 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                        <div className="flex flex-wrap gap-2 bg-slate-950/60 p-4 rounded-2xl border border-slate-800">
                           {Object.keys(s.answeredGrid).map(qNum => {
                             const status = s.answeredGrid[qNum];
                             const isCurrent = parseInt(qNum) === s.currentQuestion;
                             return (
                               <div
                                 key={qNum}
-                                className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs border transition ${
+                                className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs border transition-all duration-300 ${
                                   isCurrent
-                                    ? 'border-blue-400 ring-2 ring-blue-500/50 bg-blue-600 text-white'
+                                    ? 'border-blue-400 ring-2 ring-blue-500/40 bg-blue-600 text-white scale-110'
                                     : status === 'answered'
-                                      ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50'
+                                      ? 'bg-emerald-600/25 text-emerald-300 border-emerald-500/50'
                                       : status === 'flagged'
-                                        ? 'bg-amber-600/30 text-amber-300 border-amber-500/50'
-                                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                                        ? 'bg-amber-600/25 text-amber-300 border-amber-500/50'
+                                        : 'bg-slate-800 text-slate-500 border-slate-700'
                                 }`}
                               >
                                 {qNum}
@@ -985,15 +1155,15 @@ export default function LiveMonitor() {
                             );
                           })}
                         </div>
-                        <div className="flex items-center gap-4 text-[10px] text-slate-400 font-semibold">
-                          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Đã trả lời</span>
-                          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Gắn cờ</span>
-                          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Đang xem</span>
-                          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-700" /> Chưa làm</span>
+                        <div className="flex items-center gap-4 text-[10px] text-slate-400 font-semibold flex-wrap">
+                          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-md bg-emerald-600/40 border border-emerald-500/50" /> Đã trả lời</span>
+                          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-md bg-amber-600/40 border border-amber-500/50" /> Gắn cờ</span>
+                          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-md bg-blue-600 border border-blue-400" /> Đang xem</span>
+                          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-md bg-slate-800 border border-slate-700" /> Chưa làm</span>
                         </div>
                       </>
                     ) : (
-                      <div className="text-xs text-slate-500 bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center">
+                      <div className="text-xs text-slate-500 bg-slate-950/60 p-8 rounded-2xl border border-slate-800 text-center">
                         Không có dữ liệu ma trận câu hỏi.
                       </div>
                     )}
@@ -1003,21 +1173,26 @@ export default function LiveMonitor() {
                 {/* Tab: Nhật ký */}
                 {detailTab === 'logs' && (
                   <div className="space-y-3">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-2 m-0">
-                      <Activity className="h-4 w-4 text-emerald-400" /> Dòng thời gian thao tác
-                    </h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-2 m-0">
+                        <Activity className="h-4 w-4 text-emerald-400" /> Dòng thời gian thao tác
+                      </h4>
+                      {s.actionLogs?.length > 0 && (
+                        <span className="text-[10px] font-bold text-slate-500">{s.actionLogs.length} sự kiện</span>
+                      )}
+                    </div>
                     {s.actionLogs && s.actionLogs.length > 0 ? (
-                      <div className="space-y-1.5 bg-slate-950 p-4 rounded-2xl border border-slate-800 max-h-64 overflow-y-auto">
+                      <div className="space-y-1 bg-slate-950/60 p-4 rounded-2xl border border-slate-800 max-h-64 overflow-y-auto">
                         {s.actionLogs.map((log, idx) => (
-                          <div key={idx} className="flex justify-between items-center text-xs font-mono border-b border-slate-800/60 pb-1.5 last:border-0">
-                            <span className="text-slate-500">{log.time}</span>
-                            <span className="text-slate-200 font-sans font-medium text-right">{log.detail}</span>
+                          <div key={idx} className="flex gap-3 items-start text-xs py-1.5 border-b border-slate-800/50 last:border-0">
+                            <span className="text-slate-600 font-mono shrink-0 pt-px">{log.time}</span>
+                            <span className="text-slate-300 font-medium leading-relaxed">{log.detail}</span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="text-xs text-slate-500 bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center">
-                        Chưa có nhật ký thao tác.
+                      <div className="text-xs text-slate-500 bg-slate-950/60 p-8 rounded-2xl border border-slate-800 text-center">
+                        Chưa có nhật ký thao tác nào.
                       </div>
                     )}
                   </div>
@@ -1049,9 +1224,9 @@ export default function LiveMonitor() {
                 )}
 
               </div>
-            </Card>
+            </div>
           </div>
-        );
+        , document.body);
       })()}
     </div>
   );

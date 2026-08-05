@@ -2,10 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
-import { ensureSeeded } from './utils/storage.js'
+import { storageV2 } from './utils/storageV2.js'
 
-// Đảm bảo data mặc định được seed lên Firestore
-ensureSeeded();
+// Khởi chạy ngầm DB Migration sang cấu trúc NoSQL mới (Subcollections)
+storageV2.runMigrationOnce().catch(console.error);
 
 // Initialize Theme
 if (localStorage.getItem('qm_theme') === 'dark' || 

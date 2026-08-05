@@ -210,20 +210,20 @@ export default function PracticeReview() {
                         if (qType === 'groupdrag') {
                           const allItems = (q.groups || []).reduce((acc, g) => [...acc, ...(g.items || [])], []).sort();
                           return (
-                            <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3">
+                            <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl space-y-3">
                               {allItems.map((item, itemIdx) => {
                                 const userGroup = (q.userAnswer || {})[item] || '';
                                 const correctGroup = (q.groups || []).find(g => (g.items || []).includes(item))?.name || '';
                                 const isItemCorrect = userGroup === correctGroup;
                                 return (
-                                  <div key={itemIdx} className="flex flex-col sm:flex-row gap-4 items-center bg-white p-3 border border-slate-200 rounded-xl">
-                                    <div className="flex-1 text-slate-700 font-medium">{item}</div>
+                                  <div key={itemIdx} className="flex flex-col sm:flex-row gap-4 items-center bg-white dark:bg-slate-900 p-3 border border-slate-200 dark:border-slate-800 rounded-xl">
+                                    <div className="flex-1 text-slate-700 dark:text-slate-300 font-medium">{item}</div>
                                     <div className="flex flex-col sm:flex-row gap-2 shrink-0">
-                                      <div className={`p-2 rounded-lg border text-sm font-bold ${isItemCorrect ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
+                                      <div className={`p-2 rounded-lg border text-sm font-bold ${isItemCorrect ? 'border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300' : 'border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-300'}`}>
                                         Nhóm đã chọn: {userGroup || '(Chưa chọn)'}
                                       </div>
                                       {!isItemCorrect && (
-                                        <div className="p-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 text-sm font-bold">
+                                        <div className="p-2 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300 text-sm font-bold">
                                           Nhóm đúng: {correctGroup}
                                         </div>
                                       )}
@@ -240,7 +240,7 @@ export default function PracticeReview() {
                           const userAnswers = q.userAnswer || [];
                           const correctAnswers = q.answers || [];
                           return (
-                            <div className="bg-white border-2 border-slate-200 p-6 rounded-2xl text-slate-800 leading-loose text-base">
+                            <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 p-6 rounded-2xl text-slate-800 dark:text-slate-200 leading-loose text-base">
                               {parts.map((part, pIdx) => {
                                 if (pIdx === parts.length - 1) {
                                   return <span key={pIdx} dangerouslySetInnerHTML={{ __html: part }} />;
@@ -251,8 +251,8 @@ export default function PracticeReview() {
                                 return (
                                   <span key={pIdx} className="inline-block mx-1">
                                     <span dangerouslySetInnerHTML={{ __html: part }} />
-                                    <span className={`px-2 py-0.5 rounded-lg border-2 font-bold text-sm ${isPartCorrect ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
-                                      {userAns || '...'} {!isPartCorrect && <span className="text-emerald-700 font-bold ml-1">({correctAns})</span>}
+                                    <span className={`px-2 py-0.5 rounded-lg border-2 font-bold text-sm ${isPartCorrect ? 'border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300' : 'border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-300'}`}>
+                                      {userAns || '...'} {!isPartCorrect && <span className="text-emerald-700 dark:text-emerald-400 font-bold ml-1">({correctAns})</span>}
                                     </span>
                                   </span>
                                 );
@@ -265,7 +265,7 @@ export default function PracticeReview() {
                           const userWords = (q.userAnswer || []).map(idx => q.items[idx]);
                           const correctWords = q.items || [];
                           return (
-                            <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl space-y-4">
+                            <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl space-y-4">
                               <div>
                                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Lựa chọn của bạn:</span>
                                 <div className="flex flex-wrap gap-2">
@@ -273,24 +273,24 @@ export default function PracticeReview() {
                                     userWords.map((word, wIdx) => (
                                       <span 
                                         key={wIdx} 
-                                        className={`px-4 py-2 border-2 rounded-2xl text-sm font-bold shadow-sm ${isCorrect ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800'}`}
+                                        className={`px-4 py-2 border-2 rounded-2xl text-sm font-bold shadow-sm ${isCorrect ? 'border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300' : 'border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-300'}`}
                                       >
                                         {word}
                                       </span>
                                     ))
                                   ) : (
-                                    <span className="text-sm font-bold text-red-800 italic">(Không sắp xếp)</span>
+                                    <span className="text-sm font-bold text-red-800 dark:text-red-400 italic">(Không sắp xếp)</span>
                                   )}
                                 </div>
                               </div>
                               {!isCorrect && (
-                                <div className="pt-3 border-t border-slate-200">
+                                <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
                                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Thứ tự đúng:</span>
                                   <div className="flex flex-wrap gap-2">
                                     {correctWords.map((word, wIdx) => (
                                       <span 
                                         key={wIdx} 
-                                        className="px-4 py-2 border-2 border-emerald-200 bg-emerald-50 text-emerald-800 text-sm font-bold rounded-2xl shadow-sm"
+                                        className="px-4 py-2 border-2 border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300 text-sm font-bold rounded-2xl shadow-sm"
                                       >
                                         {word}
                                       </span>

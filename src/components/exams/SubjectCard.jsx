@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { BookOpen, CheckCircle, Trash2, ArrowRight, Code2, ShieldAlert, Pencil } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { storage } from '../../utils/storage';
+import { storageV2 } from '../../utils/storageV2';
 
 export default function SubjectCard({ subject, onDelete, onOpen, onUpdate }) {
   const isCompleted = subject.isCompleted;
@@ -20,17 +21,25 @@ export default function SubjectCard({ subject, onDelete, onOpen, onUpdate }) {
     }
   };
 
+  const [examsCount, setExamsCount] = useState(0);
+
   useEffect(() => {
     // Đồng bộ trạng thái code dựa trên trường status của môn học từ Firebase
     const isCodingSub = subject.status === 'developer';
     setIsCoding(isCodingSub);
 
-    if (isCodingSub) {
-      const probs = storage.loadSubjectCodingProblems(subject.id, [subject]);
-      setCodingCount(probs.length);
-    } else {
-      setCodingCount(0);
+    async function fetchCounts() {
+      if (isCodingSub) {
+        const probs = await storageV2.loadCodingProblemsV2(subject.id);
+        setCodingCount(probs.length);
+      } else {
+        setCodingCount(0);
+      }
+      
+      const exams = await storageV2.loadExamsV2(subject.id);
+      setExamsCount(exams.length);
     }
+    fetchCounts();
   }, [subject.id, subject.status]);
 
   const handleToggleClick = (e) => {
@@ -110,7 +119,7 @@ export default function SubjectCard({ subject, onDelete, onOpen, onUpdate }) {
             {isCoding ? (
               <span>{codingCount} Đề thi lập trình (Code)</span>
             ) : (
-              <span>{subject.exams?.length || 0} Đề thi trắc nghiệm</span>
+              <span>{examsCount} Đề thi trắc nghiệm</span>
             )}
           </p>
         </div>

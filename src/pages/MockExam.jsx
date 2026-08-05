@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { storage } from '../utils/storage';
@@ -30,6 +30,22 @@ const markSessionAsExpired = (code) => {
   }
 };
 
+// Xóa mã khỏi danh sách expired (dùng khi session mới được tạo với mã chưa từng dùng)
+// Đây là lớp bảo vệ tránh lỗi "Session không hợp lệ" do mã trùng cực hiếm
+const clearExpiredSession = (code) => {
+  if (!code) return;
+  try {
+    const expired = JSON.parse(localStorage.getItem('qm_expired_sessions') || '[]');
+    const filtered = expired.filter(c => c !== code);
+    if (filtered.length !== expired.length) {
+      localStorage.setItem('qm_expired_sessions', JSON.stringify(filtered));
+      console.warn('[Session] Cleared stale expired marker for new session:', code);
+    }
+  } catch (e) {
+    console.error('[Session] Error clearing expired session:', e);
+  }
+};
+
 // Chuyển ký tự xuống dòng \n thành <br> để render đúng trong HTML
 const formatQuestionText = (text) => {
   if (!text) return '';
@@ -39,8 +55,9 @@ const formatQuestionText = (text) => {
 export default function MockExam() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { sessionId: urlSessionId } = useParams(); // Lấy sessionId từ URL nếu có
   const { currentUser } = useAuth();
-  const { theme } = useTheme(); // ensure theme context is consumed so provider syncs documentElement
+  const { theme } = useTheme();
 
   // Load active session from localStorage if it matches current user and examId
   const savedSession = (() => {
@@ -49,10 +66,10 @@ export default function MockExam() {
       if (sessionStr) {
         const session = JSON.parse(sessionStr);
         if (session.userId === currentUser?.id) {
-          // If location.state has a specific examId, verify it matches the saved session
-          if (!location.state || location.state.examId === session.examId) {
-            return session;
-          }
+          // ưu tiên session có sessionId khớp URL
+          if (urlSessionId && session.examSessionCode === urlSessionId) return session;
+          // Fallback: nếu URL không có sessionId, khớp examId
+          if (!urlSessionId && (!location.state || location.state.examId === session.examId)) return session;
         }
       }
     } catch (e) {
@@ -65,8 +82,18 @@ export default function MockExam() {
   const examData = savedSession?.examData || location.state || null;
   const { examId, title, questions = [], timeLimit = 15 * 60, mode, subjectName } = examData || {};
 
+  // ưu tiên sessionId từ URL, sau đó mới tới location.state, sau cùng mới tự sinh
   const [examSessionCode] = useState(() => {
-    return savedSession?.examSessionCode || location.state?.examSessionCode || `exam_${currentUser?.id || 'guest'}_${examId || 'quiz'}`;
+    const code = urlSessionId
+      || savedSession?.examSessionCode
+      || location.state?.examSessionCode
+      || `exam_${currentUser?.id || 'guest'}_${examId || 'quiz'}`;
+    // Nếu session đến từ ClientDashboard (location.state có mã mới) → xóa cờ expired cũ nếu có
+    // Điều này ngăn lỗi "Session không hợp lệ" do trùng mã hiếm gặp
+    if (location.state?.examSessionCode) {
+      clearExpiredSession(location.state.examSessionCode);
+    }
+    return code;
   });
 
   const [isInvalidSession] = useState(() => {
@@ -145,23 +172,52 @@ export default function MockExam() {
   const lastAdminMsgTimeRef = useRef(null);
   const submitExamRef = useRef(null);
 
-  // Sync active exam session to localStorage & Firestore Realtime
+  // ── BroadcastChannel: Ch\u1ed1ng m\u1edf 2 tab cho ch\u1ebf \u0111\u1ed9 SIMULATION \u2014 Practice kh\u00f4ng c\u1ea7n ──
+  const [isBlockedByDupTab, setIsBlockedByDupTab] = useState(false);
+  useEffect(() => {
+    if (mode !== 'simulation' || !examSessionCode) return;
+    const channelName = `qm_sim_${examSessionCode}`;
+    let bc;
+    try {
+      bc = new BroadcastChannel(channelName);
+    } catch {
+      return; // Tr\u00ecnh duy\u1ec7t kh\u00f4ng h\u1ed7 tr\u1ee3 BroadcastChannel — b\u1ecf qua
+    }
+    // Ph\u00e1t tin hi\u1ec7u "tab n\u00e0y \u0111\u00e3 ch\u1ee7 \u0111\u1ed9ng" ngay khi mount
+    bc.postMessage({ type: 'HELLO', from: 'new_tab' });
+    // L\u1eafng nghe khi c\u00f3 tab kh\u00e1c ph\u00e1t hi\u1ec7u
+    bc.onmessage = (e) => {
+      if (e.data?.type === 'HELLO') {
+        // Tab n\u00e0y \u0111\u00e3 ch\u1ea1y tr\u01b0\u1edbc \u2192 b\u00e1o tab m\u1edbi r\u1eb1ng \u0111\u00e3 c\u00f3 tab master
+        bc.postMessage({ type: 'DUPLICATE_REJECTED' });
+      }
+      if (e.data?.type === 'DUPLICATE_REJECTED') {
+        // Tab n\u00e0y b\u1ecb block v\u00ec \u0111\u00e3 c\u00f3 tab kh\u00e1c ch\u1ea1y tr\u01b0\u1edbc
+        setIsBlockedByDupTab(true);
+      }
+    };
+    return () => { try { bc.close(); } catch {} };
+  }, [mode, examSessionCode]);
+
+  // ── Instant Realtime Sync: Chỉ sync khi Thảo tác quan trọng thay đổi (answers, flagged, warnings, câu hỏi, vi phạm)
+  // KHÔNG bao gồm timeLeft (đồng hồ chuyển riêng sang Heartbeat 15s dưới)
   useEffect(() => {
     if (isSubmittedRef.current || isInvalidSession || isTerminatedByAdmin || isDeletedByAdmin || isLockOrDeletedRef.current) return;
     try {
+      // Sync LocalStorage (giử toàn bộ state cho Reload Recovery)
       const session = {
         userId: currentUser?.id,
         examId,
         examData,
         answers,
         flagged,
-        timeLeft,
+        timeLeft: timeLeftRef.current,
         warningCount,
         examSessionCode
       };
       localStorage.setItem('qm_active_session', JSON.stringify(session));
 
-      // Đẩy ma trận câu hỏi & chi tiết thao tác Realtime lên Firestore cho Admin Live Monitor
+      // Push ngay lập tức lên Firestore (< 100ms) khi học sinh thao tác
       if (examSessionCode) {
         const answeredGrid = {};
         questions.forEach((_, idx) => {
@@ -183,7 +239,7 @@ export default function MockExam() {
           answeredCount: answers ? Object.keys(answers).length : 0,
           answeredGrid,
           actionLogs,
-          timeLeft,
+          timeLeft: timeLeftRef.current,
           warningCount: warningCount || 0,
           status: 'online',
         });
@@ -191,7 +247,24 @@ export default function MockExam() {
     } catch (e) {
       console.error('[Session] Error saving active session:', e);
     }
-  }, [answers, flagged, timeLeft, warningCount, currentUser, examId, examData, examSessionCode, isInvalidSession, currentQuestion, questions, title, mode, actionLogs, isTerminatedByAdmin, isDeletedByAdmin]);
+  }, [answers, flagged, warningCount, currentUser, examId, examData, examSessionCode, isInvalidSession, currentQuestion, questions, title, mode, actionLogs, isTerminatedByAdmin, isDeletedByAdmin]);
+
+  // ── Heartbeat 15s: Chỉ gửi lastActive + timeLeft, không spam toàn bộ state ──
+  useEffect(() => {
+    if (screen !== 'quiz' || !examSessionCode) return;
+    if (isSubmittedRef.current || isLockOrDeletedRef.current) return;
+
+    const hb = setInterval(() => {
+      if (isSubmittedRef.current || isLockOrDeletedRef.current) return;
+      storage.updateActiveSession(examSessionCode, {
+        lastActive: new Date().toISOString(),
+        timeLeft: timeLeftRef.current,
+        status: 'online',
+      });
+    }, 15000);
+
+    return () => clearInterval(hb);
+  }, [screen, examSessionCode]);
 
   // Lắng nghe lệnh từ xa của Admin (Live Monitor: Khóa từ xa / Xóa thẻ / Nhắc nhở)
   useEffect(() => {
@@ -257,10 +330,17 @@ export default function MockExam() {
 
   useEffect(() => {
     return () => {
-      // Nếu rời khỏi trang (không phải do reload) và chưa nộp bài, hủy phiên làm bài thi ngay lập tức
-      if (!isReloadingRef.current && !isSubmittedRef.current && !isInvalidSession) {
+      // Nếu rời khỏi trang (không phải do reload) và chưa nộp bài:
+      // Đẩy status: 'abandoned' lên Firestore để Admin thấy ⋄️ Rời phòng
+      if (!isReloadingRef.current && !isSubmittedRef.current && !isInvalidSession && examSessionCode && !isLockOrDeletedRef.current) {
         markSessionAsExpired(examSessionCode);
         localStorage.removeItem('qm_active_session');
+        // Giữ lại session trên Firestore nhưng chuyển sang trạng thái abandoned
+        storage.updateActiveSession(examSessionCode, {
+          status: 'abandoned',
+          abandonedAt: new Date().toISOString(),
+          abandonedReason: 'Học sinh tự ý thoát / Lùi trang',
+        });
       }
     };
   }, [examSessionCode, isInvalidSession]);
@@ -461,6 +541,7 @@ export default function MockExam() {
       examId,
       title,
       subjectName,
+      mode: mode || 'practice',
       userId: currentUser?.id,
       score,
       timeTaken,
@@ -522,6 +603,35 @@ export default function MockExam() {
         <Button onClick={() => navigate('/client/dashboard')} className="font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 py-2.5 shadow-md border-transparent">
           Quay về Trang chính
         </Button>
+      </div>
+    );
+  }
+
+  // Chặn mở 2 tab cho chế độ Simulation
+  if (isBlockedByDupTab) {
+    return (
+      <div className="fixed inset-0 z-[999999] bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center select-none">
+        <div className="max-w-sm w-full bg-slate-900 border-2 border-red-500/60 rounded-3xl p-8 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
+          <div className="w-20 h-20 bg-red-500/10 border border-red-500/30 rounded-full flex items-center justify-center mx-auto">
+            <ShieldAlert className="h-10 w-10 text-red-400 animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-black text-white uppercase tracking-tight">Phiên thi đang mở ở tab khác!</h2>
+            <p className="text-slate-400 text-sm leading-relaxed">
+              Bài thi mô phỏng này <strong className="text-red-400">đang được mở ở một cửa sổ/tab khác</strong>.
+              Vui lòng đóng tab này và quay lại tab đang làm bài để tiếp tục.
+            </p>
+          </div>
+          <div className="bg-red-950/30 border border-red-900/40 rounded-2xl px-4 py-3 text-xs font-bold text-red-400">
+            🔒 Hệ thống chỉ cho phép 1 tab duy nhất cho mỗi phiên thi mô phỏng.
+          </div>
+          <Button
+            onClick={() => window.close()}
+            className="w-full font-bold bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 border-transparent shadow-md"
+          >
+            Đóng tab này
+          </Button>
+        </div>
       </div>
     );
   }
@@ -874,7 +984,13 @@ export default function MockExam() {
 
                     const handleDropToPair = (leftKey, rightVal) => {
                       if (!rightVal) return;
-                      const next = { ...currentPairAnswers, [leftKey]: rightVal };
+                      const next = { ...currentPairAnswers };
+                      // Xóa giá trị này ở ô cũ nếu nó đang được gán (chống duplicate / ghost)
+                      const existingLeftKey = Object.keys(next).find(k => next[k] === rightVal);
+                      if (existingLeftKey && existingLeftKey !== leftKey) {
+                        delete next[existingLeftKey];
+                      }
+                      next[leftKey] = rightVal;
                       setAnswers(prev => ({ ...prev, [currentQuestion]: next }));
                     };
 

@@ -14,6 +14,7 @@ import CodingProblemManager from '../components/exams/CodingProblemManager';
 import SystemSettingsManager from '../components/settings/SystemSettingsManager';
 import LiveMonitor from '../components/admin/LiveMonitor';
 import { storage } from '../utils/storage';
+import { storageV2 } from '../utils/storageV2';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -25,20 +26,25 @@ export default function AdminDashboard() {
   // Theme State
   const { theme, toggleTheme } = useTheme();
 
-  // Load & Lắng nghe dữ liệu Firestore Realtime
   const [subjects, setSubjects] = useState([]);
   const [currentSubject, setCurrentSubject] = useState(null);
   const [editingExamId, setEditingExamId] = useState(null);
   const [users, setUsers] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [examResults, setExamResults] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
     setDataLoading(true);
 
-    // Lắng nghe Realtime môn học
-    const unsubSubj = storage.subscribeSubjects((s) => {
+    // Lắng nghe Realtime môn học V2
+    const unsubSubj = storageV2.subscribeSubjectsV2((s) => {
       setSubjects(s || []);
+      // Nếu đang mở 1 môn, cần update lại currentSubject để có thông tin mới nhất (tên, mô tả...)
+      setCurrentSubject(prev => {
+        if (!prev) return prev;
+        return s.find(subj => subj.id === prev.id) || prev;
+      });
       setDataLoading(false);
     });
 
@@ -52,23 +58,20 @@ export default function AdminDashboard() {
       setLogs(l || []);
     });
 
+    // Lắng nghe Realtime kết quả thi → Tự nhảy số khi học sinh nộp bài (không cần F5)
+    const unsubResults = storage.subscribeExamResults(null, (r) => {
+      setExamResults(r || []);
+    });
+
     return () => {
       if (typeof unsubSubj === 'function') unsubSubj();
       if (typeof unsubUsers === 'function') unsubUsers();
       if (typeof unsubLogs === 'function') unsubLogs();
+      if (typeof unsubResults === 'function') unsubResults();
     };
   }, []);
 
-  // Auto-save khi subjects thay đổi (Chỉ lưu sau khi đã tải xong dữ liệu từ Firebase)
-  const subjectsLoadedRef = React.useRef(false);
-  useEffect(() => {
-    if (dataLoading) return;
-    if (!subjectsLoadedRef.current) {
-      subjectsLoadedRef.current = true;
-      return;
-    }
-    storage.saveSubjects(subjects);
-  }, [subjects, dataLoading]);
+  // Đã xóa auto-save bulk subjects vì V2 lưu từng subject độc lập.
 
   // Auto-save khi users thay đổi (Chỉ lưu sau khi đã tải xong dữ liệu từ Firebase)
   const usersLoadedRef = React.useRef(false);
@@ -219,11 +222,21 @@ export default function AdminDashboard() {
           {activeTab === 'subjects' && (
             <div className="space-y-6">
               {(() => {
-                const handleUpdateSubject = (updatedSubject) => {
-                  setSubjects(subjects.map(s => s.id === updatedSubject.id ? updatedSubject : s));
-                  if (currentSubject && currentSubject.id === updatedSubject.id) {
-                    setCurrentSubject(updatedSubject);
+                const handleAddSubject = (newSubj) => {
+                  storageV2.saveSubjectV2(newSubj);
+                  addLog('System', `Đã tạo môn học mới: "${newSubj.name}"`, 'info');
+                };
+
+                const handleDeleteSubject = (subjId) => {
+                  storageV2.deleteSubjectV2(subjId);
+                  if (currentSubject && currentSubject.id === subjId) {
+                    setCurrentSubject(null);
                   }
+                  addLog('System', `Đã xóa môn học: ${subjId}`, 'warning');
+                };
+
+                const handleUpdateSubject = (updatedSubject) => {
+                  storageV2.saveSubjectV2(updatedSubject);
                 };
 
                 if (editingExamId !== null && currentSubject) {
@@ -232,21 +245,24 @@ export default function AdminDashboard() {
                       subject={currentSubject}
                       examId={editingExamId === 'new' ? null : editingExamId}
                       onBack={() => setEditingExamId(null)}
-                      onSaveExam={(examId, config, questions) => {
+                      onSaveExam={async (examId, config, questions) => {
+                        const newExamId = examId || 'ex_' + Date.now();
                         const newExam = {
-                          id: examId || 'ex_' + Date.now(),
-                          config,
-                          questions,
+                          id: newExamId,
+                          subjectId: currentSubject.id,
+                          title: config.title || 'Đề thi',
+                          config: config,
                           created: new Date().toLocaleDateString('vi-VN')
                         };
-                        const newExams = examId
-                          ? currentSubject.exams.map(e => e.id === examId ? newExam : e)
-                          : [...(currentSubject.exams || []), newExam];
-
-                        handleUpdateSubject({ ...currentSubject, exams: newExams });
+                        // Save exam
+                        await storageV2.saveExamV2(newExam);
+                        // Save questions
+                        if (questions && questions.length > 0) {
+                          await storageV2.saveQuestionsV2(newExamId, questions);
+                        }
+                        
+                        addLog('System', `Đã ${examId ? 'cập nhật' : 'tạo mới'} đề thi "${config.title}" trong môn "${currentSubject.name}"`, 'info');
                         setEditingExamId(null);
-                        addLog('Manager', `${examId ? 'Cập nhật' : 'Tạo mới'} đề thi: ${config.title || 'Chưa đặt tên'} (Môn: ${currentSubject.name})`, 'Info');
-                        alert('✅ Lưu đề thi thành công!');
                       }}
                     />
                   );
@@ -259,19 +275,20 @@ export default function AdminDashboard() {
                       <CodingProblemManager
                         subject={currentSubject}
                         onBack={() => setCurrentSubject(null)}
-                        onUpdateSubject={handleUpdateSubject}
                       />
                     );
                   }
 
-                  const handlePlayExam = (examId) => {
-                    const exam = currentSubject.exams.find(e => e.id === examId);
+                  const handlePlayExam = async (examId) => {
+                    // Fetch exam first to get config
+                    const exams = await storageV2.loadExamsV2(currentSubject.id);
+                    const exam = exams.find(e => e.id === examId);
+                    if (!exam) return;
                     navigate('/client/exam', {
                       state: {
                         examId: exam.id,
                         title: exam.config?.title || exam.title,
-                        questions: exam.questions,
-                        timeLimit: ((exam.questions?.length || 10) * 1.5) * 60,
+                        timeLimit: exam.config?.time ? exam.config.time * 60 : 15 * 60,
                         mode: 'practice',
                         subjectName: currentSubject.name
                       }
@@ -282,7 +299,6 @@ export default function AdminDashboard() {
                     <ExamManager
                       subject={currentSubject}
                       onBack={() => setCurrentSubject(null)}
-                      onUpdateSubject={handleUpdateSubject}
                       onOpenEditor={(id) => setEditingExamId(id ? id : 'new')}
                       onPlayExam={handlePlayExam}
                     />
@@ -292,19 +308,10 @@ export default function AdminDashboard() {
                 return (
                   <SubjectManager
                     subjects={subjects}
-                    onAddSubject={(s) => {
-                      setSubjects([...subjects, s]);
-                      addLog('Manager', `Thêm môn học mới: ${s.name}`, 'Info');
-                    }}
-                    onDeleteSubject={(id) => {
-                      const subj = subjects.find(s => s.id === id);
-                      if (confirm("Bạn có chắc chắn muốn xóa môn học này cùng toàn bộ đề thi bên trong?")) {
-                        setSubjects(subjects.filter(s => s.id !== id));
-                        addLog('Manager', `Xóa môn học: ${subj?.name || id}`, 'Critical');
-                      }
-                    }}
-                    onOpenSubject={(id) => setCurrentSubject(subjects.find(s => s.id === id))}
+                    onAddSubject={handleAddSubject}
+                    onDeleteSubject={handleDeleteSubject}
                     onUpdateSubject={handleUpdateSubject}
+                    onOpenSubject={(subj) => setCurrentSubject(subj)}
                   />
                 );
               })()}

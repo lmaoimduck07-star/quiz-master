@@ -1,5 +1,6 @@
 import React, { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import SpectatorView from "./pages/SpectatorView"; // Direct import — không lazy để mở tab tức thửời
 import { AuthProvider } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import PrivateRoute from "./components/PrivateRoute";
@@ -7,12 +8,14 @@ import PrivateRoute from "./components/PrivateRoute";
 // Lazy-loaded pages
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
-const ClientDashboard = lazy(() => import("./pages/ClientDashboard"));
+// ─── Wrapper components (Mobile/Tablet/Desktop auto-routing) ───────────────
+const ClientDashboard = lazy(() => import("./pages/ClientDashboardWrapper"));
+const MockExam = lazy(() => import("./pages/MockExamWrapper"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboardWrapper"));
+const CodingWorkspace = lazy(() => import("./pages/coding/CodingWorkspaceWrapper"));
+// ─── Desktop-only pages (không cần Wrapper) ──────────────────────────────
 const PracticeReview = lazy(() => import("./pages/PracticeReview"));
-const MockExam = lazy(() => import("./pages/MockExam"));
-const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const CodingDashboard = lazy(() => import("./pages/coding/CodingDashboard"));
-const CodingWorkspace = lazy(() => import("./pages/coding/CodingWorkspace"));
 const CodingViva = lazy(() => import("./pages/coding/CodingViva"));
 const CodingReview = lazy(() => import("./pages/coding/CodingReview"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -57,6 +60,24 @@ function App() {
               element={
                 <PrivateRoute allowedRoles={['Student', 'Admin']}>
                   <MockExam />
+                </PrivateRoute>
+              } 
+            />
+            {/* URL-based session route — sessionId nằm trực tiếp trên URL */}
+            <Route 
+              path="/client/exam/:sessionId" 
+              element={
+                <PrivateRoute allowedRoles={['Student', 'Admin']}>
+                  <MockExam />
+                </PrivateRoute>
+              } 
+            />
+            {/* Admin Spectator Route — Xem trực tiếp bài làm của học sinh (Read-Only) */}
+            <Route 
+              path="/admin/spectate/:sessionId" 
+              element={
+                <PrivateRoute allowedRoles={['Admin']}>
+                  <SpectatorView />
                 </PrivateRoute>
               } 
             />

@@ -504,9 +504,14 @@ export function extractQuestionsFromHtml(htmlString, redTextSet = new Set()) {
   // Sẽ được gắn vào đầu nội dung của câu hỏi MỚI (chưa tạo ra).
   let pendingContext = [];
 
+  const MULTISELECT_TAG_RE = /\[?\s*(sinh\s*viên|học\s*sinh|người\s*học)?\s*chọn\s*(\d+)?\s*(phương\s*án|đáp\s*án|câu)\s*(đúng|đúng\s*nhất)?\s*\]?/i;
+  const STANDALONE_LETTER_KEY_RE = /^[A-H]$/i;
+
   function newQuestionFromText(rawText) {
+    const cleanHead = stripTags(rawText).replace(QUESTION_START_RE, '').trim();
     return {
       qText: rawText,
+      promptSet: cleanHead.length > 0, // true nếu nội dung câu hỏi nằm cùng dòng với "Câu 1:"
       type: 'single',
       image: '',
       options: [],       // { text, image, isCorrect }
@@ -543,8 +548,7 @@ export function extractQuestionsFromHtml(htmlString, redTextSet = new Set()) {
     let cleanQText = stripTags(currentQ.qText);
     let baseObj = { question: cleanQText, image: currentQ.image, points: 1 };
 
-    // 1) Câu dạng "sắp xếp từ" (order) — kiểm tra trước vì cú pháp
-    //    "a / b / c" có thể bị nhánh khác bắt nhầm.
+    // 1) Câu dạng "sắp xếp từ" (order)
     if (currentQ.isOrderCandidate && currentQ.orderRawItems.length >= 2 && currentQ.answerLine) {
       let orderQ = buildOrderQuestion(baseObj, currentQ);
       if (orderQ) {
@@ -580,14 +584,12 @@ export function extractQuestionsFromHtml(htmlString, redTextSet = new Set()) {
         });
       }
 
-      // Nếu vẫn chưa xác định được đáp án đúng (ví dụ các đáp án chỉ có
-      // ảnh, không có cách nào đánh dấu) -> để mặc định đáp án đầu tiên,
-      // giáo viên tự chỉnh lại trong giao diện sau khi nhập.
       let needsReview = correctArr.length === 0;
       if (correctArr.length === 0) correctArr = [0];
 
+      const isMultiSelectHint = MULTISELECT_TAG_RE.test(cleanQText);
       let baseWithImages = { ...baseObj, options: cleanOptions, optionImages };
-      if (correctArr.length > 1) {
+      if (correctArr.length > 1 || isMultiSelectHint) {
         parsedQuestions.push({ type: 'multiselect', ...baseWithImages, corrects: correctArr, _needsReview: needsReview });
       } else {
         parsedQuestions.push({ type: 'single', ...baseWithImages, correct: correctArr[0], _needsReview: needsReview });
@@ -671,6 +673,7 @@ export function extractQuestionsFromHtml(htmlString, redTextSet = new Set()) {
 
     // ---- Danh sách (OL/UL) dùng làm đáp án ----
     if (tagName === 'OL' || tagName === 'UL') {
+      currentQ.promptSet = true;
       el.querySelectorAll('li').forEach((li) => {
         let optText = li.textContent.trim();
         let liImg = li.querySelector('img');
@@ -712,10 +715,18 @@ export function extractQuestionsFromHtml(htmlString, redTextSet = new Set()) {
         }
       }
       else if (textLine.match(ALPHABET_RE) || /<img/i.test(htmlLine)) {
+        currentQ.promptSet = true;
         let { html: htmlNoImg, imageSrc } = splitImageFromHtml(htmlLine);
         let optTextClean = stripTags(htmlNoImg).replace(ALPHABET_RE, '').trim();
         let isCorrect = isWholeLineBold(htmlLine) || isRedText(textLine, redTextSet);
         currentQ.options.push({ text: optTextClean, image: imageSrc, isCorrect });
+      }
+      // Đáp án là 1 ký tự A, B, C, D nằm đơn lẻ ở 1 dòng (Answer Key)
+      else if (STANDALONE_LETTER_KEY_RE.test(textLine) && currentQ.options.length > 0) {
+        const letterIdx = 'ABCDEFGH'.indexOf(textLine.toUpperCase());
+        if (letterIdx !== -1 && currentQ.options[letterIdx]) {
+          currentQ.options[letterIdx].isCorrect = true;
+        }
       }
       else if (textLine.includes('/') && (textLine.match(/\//g) || []).length >= 2 && !textLine.match(QUESTION_START_RE)) {
         currentQ.qText += '\n' + textLine;
@@ -727,19 +738,16 @@ export function extractQuestionsFromHtml(htmlString, redTextSet = new Set()) {
         if (p.length === 2) currentQ.pairs.push({ left: p[0].trim(), right: p[1].trim() });
       }
       else {
-        // Câu hỏi hiện tại đã "đủ điều kiện" để kết luận (đã có >=2 đáp án,
-        // hoặc >=2 pairs/groups, hoặc đã có đáp án fill) -> dòng lạ tiếp
-        // theo (hướng dẫn đọc, tiêu đề đoạn văn, nội dung đoạn văn...)
-        // thuộc về CÂU HỎI KẾ TIẾP, không phải nối vào câu đang xét.
-        let isAlreadyComplete = currentQ.options.length >= 2 ||
-          currentQ.pairs.length >= 2 ||
-          currentQ.groups.length >= 2 ||
-          (currentQ.type === 'fill' && currentQ.answerLine !== '');
-
-        if (isAlreadyComplete) {
-          pendingContext.push(textLine);
-        } else {
+        // Dòng văn bản không có nhãn A./B./C./D.
+        if (!currentQ.promptSet) {
+          // Chưa có đề bài -> Dòng này nối tiếp vào đề bài
           currentQ.qText += '\n' + textLine;
+          currentQ.promptSet = true;
+        } else {
+          // Đã có đề bài -> Dòng này là 1 PHƯƠNG ÁN LỰA CHỌN (Option) không nhãn!
+          let { html: htmlNoImg, imageSrc } = splitImageFromHtml(htmlLine);
+          let isCorrect = isWholeLineBold(htmlLine) || isRedText(textLine, redTextSet);
+          currentQ.options.push({ text: textLine, image: imageSrc, isCorrect });
         }
       }
     }

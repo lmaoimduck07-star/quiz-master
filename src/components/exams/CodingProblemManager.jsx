@@ -3,6 +3,7 @@ import { Button } from '../ui/Button';
 import { Card, CardContent } from '../ui/Card';
 import { Code2, Plus, Edit2, Trash2, Save, ArrowLeft, PlusCircle, MinusCircle, AlertCircle, FileText, CheckCircle2, Pencil } from 'lucide-react';
 import { storage } from '../../utils/storage';
+import { storageV2 } from '../../utils/storageV2';
 
 export default function CodingProblemManager({ subject, onBack, onUpdateSubject }) {
   const [problems, setProblems] = useState([]);
@@ -21,13 +22,14 @@ export default function CodingProblemManager({ subject, onBack, onUpdateSubject 
   };
 
   useEffect(() => {
-    // Tải danh sách bài toán hiện tại từ Firestore / LocalStorage
+    // Tải danh sách bài toán hiện tại từ Firestore V2
     async function loadData() {
       if (subject) {
-        setProblems(storage.loadSubjectCodingProblems(subject.id));
+        const probs = await storageV2.loadCodingProblemsV2(subject.id);
+        setProblems(probs);
       } else {
-        const data = await storage.loadCodingProblems();
-        setProblems(data);
+        const probs = await storageV2.loadCodingProblemsV2();
+        setProblems(probs);
       }
     }
     loadData();
@@ -42,11 +44,7 @@ export default function CodingProblemManager({ subject, onBack, onUpdateSubject 
     if (window.confirm('Bạn có chắc chắn muốn xóa đề thi lập trình này?')) {
       const updated = problems.filter(p => p.id !== id);
       setProblems(updated);
-      if (subject) {
-        await storage.saveSubjectCodingProblems(subject.id, updated);
-      } else {
-        await storage.saveCodingProblems(updated);
-      }
+      await storageV2.deleteCodingProblemV2(id);
       showSuccess('Xóa đề thi thành công!');
     }
   };
@@ -159,18 +157,20 @@ export default function CodingProblemManager({ subject, onBack, onUpdateSubject 
     }
 
     let updatedProblems;
+    const saveTarget = { ...editingProblem };
+    if (subject) {
+      saveTarget.subjectId = subject.id;
+    }
+    
     if (isNew) {
-      updatedProblems = [...problems, editingProblem];
+      updatedProblems = [...problems, saveTarget];
     } else {
-      updatedProblems = problems.map(p => p.id === editingProblem.id ? editingProblem : p);
+      updatedProblems = problems.map(p => p.id === saveTarget.id ? saveTarget : p);
     }
 
     setProblems(updatedProblems);
-    if (subject) {
-      await storage.saveSubjectCodingProblems(subject.id, updatedProblems);
-    } else {
-      await storage.saveCodingProblems(updatedProblems);
-    }
+    await storageV2.saveCodingProblemV2(saveTarget);
+    
     setEditingProblem(null);
     showSuccess(isNew ? 'Thêm mới đề thi thành công!' : 'Cập nhật đề thi thành công!');
   };

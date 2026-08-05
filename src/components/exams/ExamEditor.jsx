@@ -5,6 +5,7 @@ import QuestionList from './QuestionList';
 import WordImportModal from './WordImportModal';
 import { FileText, Upload, Trash2, FileOutput } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { storageV2 } from '../../utils/storageV2';
 
 export default function ExamEditor({ subject, examId, onBack, onSaveExam }) {
   
@@ -16,16 +17,24 @@ export default function ExamEditor({ subject, examId, onBack, onSaveExam }) {
   const [questions, setQuestions] = useState([]);
   const [isWordImportOpen, setIsWordImportOpen] = useState(false);
 
-  // 2. NẾU LÀ SỬA ĐỀ CŨ, LOAD DỮ LIỆU LÊN
+  // 2. NẾU LÀ SỬA ĐỀ CŨ, LOAD DỮ LIỆU LÊN TỪ FIREBASE
   useEffect(() => {
     if (examId) {
-      const existingExam = subject.exams.find(e => e.id === examId);
-      if (existingExam) {
-        setConfig(existingExam.config);
-        setQuestions([...existingExam.questions]);
+      async function fetchExamData() {
+        const exams = await storageV2.loadExamsV2(subject.id);
+        const existingExam = exams.find(e => e.id === examId);
+        if (existingExam) {
+          setConfig(existingExam.config);
+        }
+        
+        const qs = await storageV2.loadQuestionsV2(examId);
+        if (qs) {
+          setQuestions([...qs]);
+        }
       }
+      fetchExamData();
     }
-  }, [examId, subject]);
+  }, [examId, subject.id]);
 
   // 3. HÀM LƯU ĐỀ THI (Gửi ra ngoài App.jsx)
   const handleSave = () => {

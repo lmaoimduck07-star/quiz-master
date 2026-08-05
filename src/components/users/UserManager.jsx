@@ -36,8 +36,8 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
 
   // Lọc dữ liệu
   const filteredUsers = users.filter(user => {
-    const matchSearch = user.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                        user.username.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchSearch = user.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.username.toLowerCase().includes(searchTerm.toLowerCase());
     const userRoles = user.roles || (user.role ? [user.role] : ['Student']);
     const matchRole = roleFilter === 'All' || userRoles.includes(roleFilter);
     return matchSearch && matchRole;
@@ -93,15 +93,15 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
           <div className="flex gap-4 flex-1">
             <div className="relative w-full max-w-sm">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-              <Input 
-                placeholder="Tìm kiếm tên hoặc email..." 
+              <Input
+                placeholder="Tìm kiếm tên hoặc email..."
                 className="pl-12 h-12 rounded-xl bg-slate-50 border-slate-200 w-full"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             <div className="relative">
-              <select 
+              <select
                 className="appearance-none h-12 pl-4 pr-10 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl outline-none bg-slate-50 dark:bg-slate-950 font-medium cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors min-w-[160px]"
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
@@ -117,7 +117,7 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
             <Plus className="h-5 w-5" /> THÊM TÀI KHOẢN
           </Button>
         </CardHeader>
-        
+
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -155,7 +155,7 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
                       <td className="px-6 py-4">
                         <div className="flex flex-wrap gap-1">
                           {(user.roles || [user.role || 'Student']).map(r => (
-                            <span 
+                            <span
                               key={r}
                               className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${r === 'Admin' ? 'bg-purple-100 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400' : 'bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400'}`}
                             >
@@ -166,7 +166,7 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
                       </td>
                       <td className="px-6 py-4">
                         <label className={`inline-flex items-center gap-2 select-none ${(user.roles || []).includes('Admin') ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
-                          <input 
+                          <input
                             type="checkbox"
                             checked={user.permissions?.codingAccess || (user.roles || []).includes('Admin') || false}
                             disabled={(user.roles || []).includes('Admin')}
@@ -191,27 +191,27 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
+                          <Button
+                            variant="outline"
+                            size="icon"
                             onClick={() => handleToggleLock(user)}
                             className={`h-9 w-9 border-transparent bg-transparent ${user.status === 'Active' ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:text-amber-600' : 'text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:text-emerald-600'}`}
                             title={user.status === 'Active' ? 'Khóa tài khoản' : 'Mở khóa tài khoản'}
                           >
                             {user.status === 'Active' ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
                           </Button>
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
+                          <Button
+                            variant="outline"
+                            size="icon"
                             onClick={() => handleOpenEdit(user)}
                             className="h-9 w-9 text-slate-400 dark:text-slate-500 hover:text-primary dark:hover:text-blue-400 hover:bg-primary/5 dark:hover:bg-blue-900/10 border-transparent bg-transparent"
                             title="Sửa thông tin"
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
+                          <Button
+                            variant="outline"
+                            size="icon"
                             onClick={() => handleDelete(user.id)}
                             className="h-9 w-9 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 border-transparent bg-transparent"
                             title="Xóa vĩnh viễn"
@@ -229,7 +229,7 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
         </CardContent>
       </Card>
 
-      <UserModal 
+      <UserModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveModal}
@@ -278,7 +278,7 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
 
             <div className="p-8 space-y-5">
               <div className={`p-4 rounded-2xl text-sm font-semibold leading-relaxed border ${permConfirm.newValue ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/40 text-blue-800 dark:text-blue-300' : 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-300'}`}>
-                {permConfirm.newValue 
+                {permConfirm.newValue
                   ? <>🔓 Bạn đang <strong>CẤP QUYỀN</strong> Thi Lập trình &amp; Vấn đáp AI cho tài khoản <strong>{permConfirm.user.fullName}</strong> ({permConfirm.user.username}).</>
                   : <>🔒 Bạn đang <strong>THU HỒI QUYỀN</strong> Thi Lập trình &amp; Vấn đáp AI của tài khoản <strong>{permConfirm.user.fullName}</strong> ({permConfirm.user.username}).</>
                 }

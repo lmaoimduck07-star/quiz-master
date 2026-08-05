@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Save, User, KeyRound, Mail, ShieldAlert, Terminal } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -9,7 +10,7 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
     id: '',
     fullName: '',
     username: '',
-    password: '12345678', // Default password
+    password: '12345678',
     roles: ['Student'],
     status: 'Active',
     permissions: { codingAccess: false },
@@ -23,7 +24,7 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
           roles: initialData.roles || (initialData.role ? [initialData.role] : ['Student']),
           password: initialData.password || '12345678',
           permissions: initialData.permissions || { codingAccess: false },
-        }); 
+        });
       } else {
         setFormData({
           id: '',
@@ -38,12 +39,10 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
     }
   }, [isOpen, initialData]);
 
-  if (!isOpen) return null;
-
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.fullName.trim() || !formData.username.trim()) {
-      alert("Vui lòng nhập đầy đủ Tên hiển thị và Tên đăng nhập (Email)! (Mã lỗi: USER-01)");
+      alert("Vui lòng nhập đầy đủ các thông tin bắt buộc! (Mã lỗi: USER-01)");
       return;
     }
 
@@ -52,7 +51,6 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
       return;
     }
     
-    // Pass back data
     const submitData = { 
       ...formData,
       fullName: formData.fullName.trim(),
@@ -67,14 +65,12 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
     if (checked) {
       setFormData(prev => {
         const newRoles = [...prev.roles, role];
-        // Nếu thêm Admin → tự động bật codingAccess
         const newPermissions = role === 'Admin' 
           ? { ...prev.permissions, codingAccess: true }
           : prev.permissions;
         return { ...prev, roles: newRoles, permissions: newPermissions };
       });
     } else {
-      // Đảm bảo không bỏ chọn tất cả
       setFormData(prev => ({
         ...prev,
         roles: prev.roles.filter(r => r !== role)
@@ -82,8 +78,10 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 dark:bg-slate-950/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+  if (!isOpen) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
       <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 transition-colors">
         
         {/* Header */}
@@ -98,7 +96,7 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
         </div>
 
         {/* Body */}
-        <div className="p-8 space-y-6 overflow-y-auto">
+        <div className="p-8 space-y-6 overflow-y-auto max-h-[70vh]">
           <div>
             <label className="block text-slate-700 dark:text-slate-300 font-bold mb-2 text-sm uppercase tracking-wider flex items-center gap-2">
               Tên hiển thị
@@ -122,7 +120,7 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
               value={formData.username}
               onChange={(e) => setFormData({ ...formData, username: e.target.value })}
               className="w-full font-medium"
-              disabled={isEdit} // Thường không cho đổi username
+              disabled={isEdit}
             />
             {isEdit && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Không thể thay đổi tên đăng nhập.</p>}
           </div>
@@ -137,81 +135,81 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               className="w-full font-medium"
             />
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Mặc định là 12345678.</p>
           </div>
 
           <div>
-            <label className="block text-slate-700 dark:text-slate-300 font-bold mb-2 text-sm uppercase tracking-wider flex items-center gap-2 mb-3">
-              <ShieldAlert className="h-4 w-4 text-slate-400" /> Phân quyền
+            <label className="block text-slate-700 dark:text-slate-300 font-bold mb-2 text-sm uppercase tracking-wider">
+              Vai trò (Chọn nhiều vai trò nếu cần)
             </label>
-            
-            <div className="space-y-3">
-              <label className="flex items-center gap-3 p-3 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer transition bg-transparent">
-                <input 
-                  type="checkbox"
-                  checked={formData.roles.includes('Student')}
-                  disabled={!isEdit} // Khi tạo mới chỉ được là Student, không sửa được
-                  onChange={(e) => handleRoleChange('Student', e.target.checked)}
-                  className="h-5 w-5 rounded border-slate-300 dark:border-slate-700 text-primary dark:text-blue-500 focus:ring-primary focus:ring-offset-0"
-                />
-                <div>
-                  <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">Học sinh</span>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">Tham gia thi các môn học & đề luyện tập</p>
-                </div>
-              </label>
-
-              <label className={`flex items-center gap-3 p-3 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer transition bg-transparent ${!isEdit ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                <input 
-                  type="checkbox"
-                  checked={formData.roles.includes('Admin')}
-                  disabled={!isEdit} // Khi tạo mới không được phép chọn Admin
-                  onChange={(e) => handleRoleChange('Admin', e.target.checked)}
-                  className="h-5 w-5 rounded border-slate-300 dark:border-slate-700 text-purple-600 dark:text-purple-400 focus:ring-purple-500 focus:ring-offset-0"
-                />
-                <div>
-                  <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">Quản trị viên (Admin)</span>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">Xem báo cáo, quản lý môn học, đề thi & tài khoản</p>
-                </div>
-              </label>
+            <div className="flex gap-4 p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-800">
+              {['Admin', 'Student'].map(role => {
+                const isChecked = formData.roles.includes(role);
+                return (
+                  <label key={role} className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => handleRoleChange(role, e.target.checked)}
+                      className="w-4 h-4 text-primary rounded border-slate-300 focus:ring-primary"
+                    />
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      {role === 'Admin' ? 'Quản trị viên (Admin)' : 'Học sinh (Student)'}
+                    </span>
+                  </label>
+                );
+              })}
             </div>
-            
-            {!isEdit && (
-              <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-2">
-                * Tài khoản mới mặc định chỉ có quyền Học sinh. Quyền Admin phải được cấp sau bởi quản trị viên khác.
-              </p>
-            )}
           </div>
 
-          {/* Quyền tính năng */}
           <div>
-            <label className="block text-slate-700 dark:text-slate-300 font-bold mb-2 text-sm uppercase tracking-wider flex items-center gap-2 mb-3">
-              <Terminal className="h-4 w-4 text-slate-400" /> Quyền tính năng
+            <label className="block text-slate-700 dark:text-slate-300 font-bold mb-2 text-sm uppercase tracking-wider">
+              Trạng thái tài khoản
             </label>
-            
-            <div className="space-y-3">
-              <label className={`flex items-center gap-3 p-3 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/40 transition bg-transparent ${formData.roles.includes('Admin') ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
-                <input 
+            <div className="flex gap-4">
+              {[
+                { label: 'Hoạt động', value: 'Active', color: 'text-emerald-600 dark:text-emerald-400' },
+                { label: 'Bị khóa', value: 'Locked', color: 'text-red-600 dark:text-red-400' }
+              ].map(st => (
+                <label key={st.value} className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="status" 
+                    value={st.value} 
+                    checked={formData.status === st.value} 
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })} 
+                    className="w-4 h-4 text-primary focus:ring-primary"
+                  />
+                  <span className={`text-sm font-bold ${st.color}`}>{st.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+            <label className="block text-slate-700 dark:text-slate-300 font-bold mb-2 text-sm uppercase tracking-wider">
+              Đặc quyền ứng dụng
+            </label>
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
                   type="checkbox"
-                  checked={formData.permissions?.codingAccess || formData.roles.includes('Admin') || false}
-                  disabled={formData.roles.includes('Admin')}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    permissions: { ...prev.permissions, codingAccess: e.target.checked }
-                  }))}
-                  className="h-5 w-5 rounded border-slate-300 dark:border-slate-700 text-blue-600 dark:text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                  checked={formData.permissions?.codingAccess || false}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    permissions: { ...formData.permissions, codingAccess: e.target.checked }
+                  })}
+                  className="w-5 h-5 text-primary rounded border-slate-300 focus:ring-primary mt-0.5"
                 />
                 <div>
-                  <span className="font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-1.5">
-                    <Terminal className="h-3.5 w-3.5 text-blue-500" /> Thi Lập trình & Vấn đáp AI
+                  <span className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
+                    <Terminal className="h-4 w-4 text-indigo-500" /> Cho phép Thi Lập Trình &amp; Vấn Đáp AI
                   </span>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">Cho phép truy cập Cổng thi lập trình tự luận và vấn đáp với Giám khảo AI</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Cho phép học sinh truy cập vào khu vực Luyện lập trình, Thi lập trình và Vấn đáp trực tiếp với AI.
+                  </p>
                 </div>
               </label>
             </div>
-
-            <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-2">
-              * Mặc định tài khoản mới không có quyền. Tài khoản Admin được tự động cấp quyền này.
-            </p>
           </div>
         </div>
 
@@ -226,6 +224,7 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

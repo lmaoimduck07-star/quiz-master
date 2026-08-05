@@ -184,6 +184,31 @@ export default function CodingWorkspace() {
     };
   }, [codingSessionId, currentUser, problem, selectedLang, isTerminatedByAdmin, isDeletedByAdmin]);
 
+  // ── Heartbeat 15s: Gửi lastActive lên Firestore tránh bị đánh dấu Mất kết nối ──
+  useEffect(() => {
+    if (!codingSessionId || isLockOrDeletedRef.current) return;
+
+    const hb = setInterval(() => {
+      if (isLockOrDeletedRef.current) return;
+      storage.updateActiveSession(codingSessionId, {
+        lastActive: new Date().toISOString(),
+        status: 'online',
+      });
+    }, 15000);
+
+    return () => {
+      clearInterval(hb);
+      // Khi rời trang (unmount) → push status: 'abandoned' lên Firestore
+      if (!isLockOrDeletedRef.current) {
+        storage.updateActiveSession(codingSessionId, {
+          status: 'abandoned',
+          abandonedAt: new Date().toISOString(),
+          abandonedReason: 'Học sinh rời trang thi lập trình',
+        });
+      }
+    };
+  }, [codingSessionId]);
+
   // ── Loading init (có fail-safe chống kẹt đen màn hình) ──
   useEffect(() => {
     if (!session) return;
