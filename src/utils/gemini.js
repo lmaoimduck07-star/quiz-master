@@ -105,8 +105,8 @@ const callGeminiWithImages = async (prompt, images = [], systemInstruction = '',
   const apiKey = getApiKey();
   if (!apiKey) throw new Error('Chưa cấu hình API Key Gemini. (Mã lỗi: SYS-02)');
 
-  // Chỉ các model Vision hỗ trợ multimodal
-  const visionModels = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-3.5-flash'];
+  // Chỉ model Vision hỗ trợ multimodal (gemini-2.0-flash đã bị deprecated)
+  const visionModels = ['gemini-3.5-flash', 'gemini-2.0-flash-exp', 'gemini-1.5-flash'];
 
   // Build parts: ảnh trước, text sau cùng
   const parts = [
@@ -420,45 +420,12 @@ Cuấu trúc JSON:
 Nhận dạng: Bảng 2 cột, MỘI HÀNG là 1 cặp riêng biệt — vế TRÁI ghép với vế PHẢI của CÙNG HÀNG đó.
 Mỗi item vế trái chỉ tương ứng đúng 1 item vế phải (quan hệ 1-1).
 Ví dụ trong file Word:
-  | LẦN MƯỢN    | Thực thể trung gian |
-  | SỐ ĐT       | Thuộc tính đa trị   |
-  | MÃ ĐG       | Khóa chính          |
-  | HẠN_TRẢ     | Thuộc tính liên kết |
-→ Đây là DRAG vì mỗi hàng = 1 cặp riêng lẻ (LẦN MƯỢN ghép với Thực thể trung gian, v.v.)
-Cấu trúc JSON:
-{
-  "type": "drag",
-  "question": "Kéo thả đúng các thành phần vào loại tương ứng",
-  "pairs": [
-    { "left": "LẦN MƯỢN",    "right": "Thực thể trung gian" },
-    { "left": "SỐ ĐIỆN THOẠI","right": "Thuộc tính đa trị" },
-    { "left": "MÃ ĐG",        "right": "Khóa chính" },
-    { "left": "HẠN_TRẢ",      "right": "Thuộc tính của liên kết" }
-  ],
-  "points": 1
-}
+... (cấu trúc cũ)
 
 --- DẠNG 6: GROUPDRAG (Phân loại nhóm) ---
-Nhận dạng: Có TỪ 2 NHÓM TRỞ LÊN, mỗi nhóm chứa NHIỀU ITEMS. Các items rời được kéo vào đúng nhóm.
-Khác với DRAG ở chỗ: một nhóm có thể chứa nhiều items (quan hệ nhiều-đến-1-nhóm).
-Ví dụ: 4 nhóm "Thuộc tính phức hợp", "Thuộc tính đa trị", ... mỗi nhóm chứa nhiều items.
-Cuấu trúc JSON:
-{
-  "type": "groupdrag",
-  "question": "Phân loại các thành phần vào nhóm thích hợp",
-  "groups": [
-    { "name": "Thực thể", "items": ["NHAN_VIEN", "SAN_PHAM"] },
-    { "name": "Thuộc tính", "items": ["HO_TEN", "DIA_CHI", "MA_NV"] }
-  ],
-  "points": 1
-}
+... (cấu trúc cũ)
 
 --- DẠNG 7: CLOZEDRAG (Kéo vào đoạn văn) ---
-Nhận dạng: Đoạn văn có nhiều chỗ trống ___ cần điền từ bank đáp án đưa ra sẵn.
-Cuấu trúc JSON:
-{
-  "type": "clozedrag",
-  "question": "Đoạn văn có ___ và ___ để điền",
   "answers": ["Đáp 1", "Đáp 2"],
   "points": 1
 }
@@ -508,33 +475,50 @@ QUY TẮc CHUNG:
     return [];
   }
 
-  function normalizeQuestion(q, imgSeq) {
+  function normalizeQuestion(q, imgSeq, localMap = []) {
     const type = q.type || 'single';
     const points = Number(q.points) || 1;
 
-    // ── Resolve [IMG_N] placeholder → base64 src ──────────────
+    // ── Resolve placeholder → src ───────────────────────────────
+    // Hỗ trợ [IMAGE_K] (chunk-local, Gemini trả về) và [IMG_N] (global fallback)
+    function resolveToSrc(str) {
+      if (!str || !imgSeq || imgSeq.length === 0) return null;
+      const trimmed = str.trim();
+      const mLocal = trimmed.match(/^\[IMAGE_(\d+)\]$/i);
+      if (mLocal) {
+        const localK = parseInt(mLocal[1], 10) - 1;
+        const globalIdx = localMap[localK];
+        if (globalIdx !== undefined && globalIdx >= 0 && globalIdx < imgSeq.length) return imgSeq[globalIdx].src;
+      }
+      const mGlobal = trimmed.match(/^\[IMG_(\d+)\]$/i);
+      if (mGlobal) {
+        const globalIdx = parseInt(mGlobal[1], 10) - 1;
+        if (globalIdx >= 0 && globalIdx < imgSeq.length) return imgSeq[globalIdx].src;
+      }
+      return null;
+    }
+
     function resolveImgPlaceholder(text) {
       if (!text || !imgSeq || imgSeq.length === 0) return text;
-      return text.replace(/\[IMG_(\d+)\]/gi, (_, n) => {
-        const idx = parseInt(n, 10) - 1;
-        if (idx >= 0 && idx < imgSeq.length) {
-          return `<img src="${imgSeq[idx].src}" style="max-width:100%;vertical-align:middle;" />`;
-        }
-        return _;
-      });
+      return text
+        .replace(/\[IMAGE_(\d+)\]/gi, (full, k) => {
+          const globalIdx = localMap[parseInt(k, 10) - 1];
+          return (globalIdx !== undefined && globalIdx >= 0 && globalIdx < imgSeq.length)
+            ? `<img src="${imgSeq[globalIdx].src}" style="max-width:100%;vertical-align:middle;" />`
+            : full;
+        })
+        .replace(/\[IMG_(\d+)\]/gi, (full, n) => {
+          const idx = parseInt(n, 10) - 1;
+          return (idx >= 0 && idx < imgSeq.length)
+            ? `<img src="${imgSeq[idx].src}" style="max-width:100%;vertical-align:middle;" />`
+            : full;
+        });
     }
 
     function extractFirstImgSrc(text) {
-      // If entire option is [IMG_N], extract as image src
-      if (!text || !imgSeq || imgSeq.length === 0) return { text: text || '', imgSrc: '' };
-      const m = text.match(/^\[IMG_(\d+)\]$/i);
-      if (m) {
-        const idx = parseInt(m[1], 10) - 1;
-        if (idx >= 0 && idx < imgSeq.length) {
-          return { text: '', imgSrc: imgSeq[idx].src };
-        }
-      }
-      // Mixed text + images — resolve inline
+      if (!text) return { text: '', imgSrc: '' };
+      const src = resolveToSrc(text.trim());
+      if (src) return { text: '', imgSrc: src };
       return { text: resolveImgPlaceholder(text), imgSrc: '' };
     }
 
@@ -659,28 +643,53 @@ QUY TẮc CHUNG:
   const chunks = splitIntoChunks(rawText);
   if (chunks.length === 0) return [];
 
-  // Phân phối ảnh theo chunk: tìm [IMG_N] trong chunk để lấy ảnh tương ứng gửi kèm
-  function getImagesForChunk(chunkText) {
-    if (!imageSequence || imageSequence.length === 0) return [];
-    const refs = [...chunkText.matchAll(/\[IMG_(\d+)\]/gi)].map(m => parseInt(m[1], 10) - 1);
-    const uniqueIdxs = [...new Set(refs)].filter(i => i >= 0 && i < imageSequence.length);
-    return uniqueIdxs.map(i => ({ mimeType: imageSequence[i].mimeType, data: imageSequence[i].data }));
+  // Phân phối ảnh theo chunk — re-index thành [IMAGE_1]..[IMAGE_K] cục bộ
+  // để Gemini nhận đúng thứ tự ảnh trong parts[]
+  function getChunkImageInfo(chunkText) {
+    if (!imageSequence || imageSequence.length === 0) return { images: [], reindexedText: chunkText, localMap: [] };
+    // Tìm tất cả [IMG_N] (1-based global) trong chunk, theo thứ tự xuất hiện
+    const refs = [];
+    const seen = new Set();
+    for (const m of chunkText.matchAll(/\[IMG_(\d+)\]/gi)) {
+      const globalIdx = parseInt(m[1], 10) - 1;
+      if (!seen.has(globalIdx) && globalIdx >= 0 && globalIdx < imageSequence.length) {
+        seen.add(globalIdx);
+        refs.push(globalIdx);
+      }
+    }
+    if (refs.length === 0) return { images: [], reindexedText: chunkText, localMap: [] };
+    // Build local map: globalIdx → localIndex (1-based)
+    const localMap = refs; // localMap[localIdx-1] = globalIdx
+    // Re-index text: [IMG_N] → [IMAGE_K] (K = localIndex)
+    let reindexedText = chunkText;
+    refs.forEach((globalIdx, localIdx) => {
+      const globalN = globalIdx + 1;
+      const localK = localIdx + 1;
+      reindexedText = reindexedText.replace(new RegExp(`\\[IMG_${globalN}\\]`, 'gi'), `[IMAGE_${localK}]`);
+    });
+    const images = refs.map(i => ({ mimeType: imageSequence[i].mimeType, data: imageSequence[i].data }));
+    return { images, reindexedText, localMap };
   }
 
   const allQuestions = [];
   for (let i = 0; i < chunks.length; i++) {
     if (onProgress) onProgress(i, chunks.length);
-    const chunkImages = getImagesForChunk(chunks[i]);
-    const prompt = `Văn bản đề thi (phần ${i + 1}/${chunks.length}):\n\n${chunks[i]}\n\nHãy bóc tách tất cả câu hỏi, phân loại đúng dạng, xác định đáp án và trả về mảng JSON.`;
+    const { images: chunkImages, reindexedText, localMap } = getChunkImageInfo(chunks[i]);
+    const hasChunkImages = chunkImages.length > 0;
+    // Prompt note cho AI: mỗi [IMAGE_K] tương ứng ảnh thứ K trong parts gửi kèm
+    const imageNote = hasChunkImages
+      ? `\n\nLƯU Ý: Văn bản có ${chunkImages.length} ảnh được gửi kèm theo thứ tự [IMAGE_1], [IMAGE_2]... Khi một phương án hoặc đề bài chỉ có [IMAGE_K], giữ nguyên [IMAGE_K] trong "question" hoặc "options". Ảnh được gửi trước text theo đúng thứ tự.`
+      : '';
+    const prompt = `Văn bản đề thi (phần ${i + 1}/${chunks.length}):${imageNote}\n\n${reindexedText}\n\nHãy bóc tách tất cả câu hỏi, phân loại đúng dạng, xác định đáp án và trả về mảng JSON.`;
     try {
       let responseText;
-      if (chunkImages.length > 0) {
-        // Gửi Vision request kèm ảnh
+      if (hasChunkImages) {
         responseText = await callGeminiWithImages(prompt, chunkImages, systemInstruction, true, { maxOutputTokens: 8192, temperature: 0.1 });
       } else {
         responseText = await callGemini(prompt, systemInstruction, true, { maxOutputTokens: 8192, temperature: 0.1 });
       }
-      parseAIJsonArray(responseText).forEach(q => allQuestions.push(normalizeQuestion(q, imageSequence)));
+      // Resolve [IMAGE_K] → global imageSequence index khi normalize
+      parseAIJsonArray(responseText).forEach(q => allQuestions.push(normalizeQuestion(q, imageSequence, localMap)));
     } catch (err) {
       console.error(`[parseWordContentWithAI] Chunk ${i + 1} lỗi:`, err);
     }
