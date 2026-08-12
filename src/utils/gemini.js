@@ -97,6 +97,60 @@ const callGemini = async (prompt, systemInstruction = '', jsonMode = false, opti
   throw lastError || new Error('Không thể kết nối đến Gemini API. Vui lòng kiểm tra API key. (Mã lỗi: SYS-03)');
 };
 
+/**
+ * callGeminiWithImages — Gọi Gemini Vision API với cả text và hình ảnh (multimodal).
+ * images: mảng { mimeType: 'image/png', data: 'base64...' }
+ */
+const callGeminiWithImages = async (prompt, images = [], systemInstruction = '', jsonMode = false, options = {}) => {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error('Chưa cấu hình API Key Gemini. (Mã lỗi: SYS-02)');
+
+  // Chỉ các model Vision hỗ trợ multimodal
+  const visionModels = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-3.5-flash'];
+
+  // Build parts: ảnh trước, text sau cùng
+  const parts = [
+    ...images.map(img => ({ inlineData: { mimeType: img.mimeType, data: img.data } })),
+    { text: prompt }
+  ];
+
+  const requestBody = {
+    contents: [{ parts }],
+    generationConfig: {
+      temperature: options.temperature ?? 0.1,
+      maxOutputTokens: options.maxOutputTokens ?? 8192,
+    }
+  };
+  if (systemInstruction) requestBody.systemInstruction = { parts: [{ text: systemInstruction }] };
+  if (jsonMode) requestBody.generationConfig.responseMimeType = 'application/json';
+
+  let lastError = null;
+  for (const modelName of visionModels) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const pts = data.candidates?.[0]?.content?.parts || [];
+        const textPts = pts.filter(p => p.text !== undefined);
+        return textPts.length > 0 ? textPts[textPts.length - 1].text : '';
+      }
+      const errData = await response.json().catch(() => ({}));
+      lastError = new Error(`Gemini Vision lỗi (${modelName}): ${errData.error?.message || response.status}`);
+      if (response.status === 429 || response.status === 404) { console.warn(lastError.message); continue; }
+      throw lastError;
+    } catch (err) {
+      if (err.message?.includes('401') || err.message?.includes('UNAUTHENTICATED')) throw err;
+      lastError = err;
+    }
+  }
+  throw lastError || new Error('Gemini Vision API không khả dụng.');
+};
+
 // 1. Tạo câu hỏi đầu tiên
 export const generateFirstQuestion = async (problem, studentCode, lastOutput, language = 'python') => {
   const problemContent = typeof problem === 'object' 
@@ -295,13 +349,22 @@ Hãy phân tích đề bài, tự động trích xuất các tiêu chí cần đ
  * @param {function} [onProgress] - Callback(done, total) khi xử lý chunk
  * @returns {Promise<Array>}   Danh sách câu hỏi đã chuẩn hóa
  */
-export const parseWordContentWithAI = async (rawText, imageMap = {}, onProgress = null) => {
+export const parseWordContentWithAI = async (rawText, imageMap = {}, onProgress = null, imageSequence = []) => {
   const CHUNK_LINES = 120;
+  const hasImages = imageSequence.length > 0;
 
   const systemInstruction = `Bạn là chuyên gia phân tích và bóc tách đề thi học thuật.
 Nhiệm vụ: Đọc văn bản đề thi và trả về mảng JSON các câu hỏi.
+${hasImages ? `
+QUY TẮc XọX LÝ ẢNH:
+- Trong văn bản có các placeholder [IMG_1], [IMG_2], [IMG_3]... tương ứng với các ảnh được gửi kèm theo thứ tự.
+- Khi đặt giá trị cho "question" hay "options", giữ nguyên placeholder [IMG_N] nếu ảnh đó là toàn bộ nội dung (thí dụ: phương án chỉ gồm 1 ảnh công thức).
+- Nếu ảnh là bảng dữ liậu trong đề bài, giữ [IMG_N] trong "question" kèm theo mô tả văn bản.
+- Nếu phương án chỉ gồm ảnh (không có text), viết đúng [IMG_N] vào mảng options tại vị trí tương ứng.
+- Ví dụ: options: ["[IMG_2]", "[IMG_3]", "[IMG_4]", "[IMG_5]"] nếu cả 4 phương án đều là ảnh.
+` : ''}
 
-HỆ THỐNG HỔ TRỢ ĐÚNG 8 DẠNG CÂU HỊI - phân loại chính xác theo nội dung:
+HỆ THỐNG HỔ TRỢ ĐÚNG 9 DẠNG CÂU HịI - phân loại chính xác theo nội dung:
 
 --- DẠNG 1: SINGLE (Trắc nghiệm chọn 1 đáp án đúng) ---
 Nhận dạng: Có các phương án A/B/C/D. Chỉ 1 đáp án đúng (in đậm, gạch chân, đánh dấu *, in đỏ, hoặc ghi "Answers: A").
@@ -354,7 +417,7 @@ Cuấu trúc JSON:
 "correct": true nếu đúng, false nếu sai (kiểu boolean).
 
 --- DẠNG 5: DRAG (Ghép cặp 1-1) ---
-Nhận dạng: Bảng 2 cột, MỖI HÀNG là 1 cặp riêng biệt — vế TRÁI ghép với vế PHẢI của CÙNG HÀNG đó.
+Nhận dạng: Bảng 2 cột, MỘI HÀNG là 1 cặp riêng biệt — vế TRÁI ghép với vế PHẢI của CÙNG HÀNG đó.
 Mỗi item vế trái chỉ tương ứng đúng 1 item vế phải (quan hệ 1-1).
 Ví dụ trong file Word:
   | LẦN MƯỢN    | Thực thể trung gian |
@@ -378,84 +441,57 @@ Cấu trúc JSON:
 --- DẠNG 6: GROUPDRAG (Phân loại nhóm) ---
 Nhận dạng: Có TỪ 2 NHÓM TRỞ LÊN, mỗi nhóm chứa NHIỀU ITEMS. Các items rời được kéo vào đúng nhóm.
 Khác với DRAG ở chỗ: một nhóm có thể chứa nhiều items (quan hệ nhiều-đến-1-nhóm).
-Ví dụ trong file Word:
-  Tiêu đề: "1) Kiểu thực thể" | "2) Thuộc tính"
-  Items cần kéo vào đúng nhóm: Mặt hàng, Nhân viên, Chủng loại, Giá bán, Mã nhân viên...
-→ Đây là GROUPDRAG vì nhóm "Thuộc tính" chứa nhiều items (Chủng loại, Giá bán, Mã nhân viên...)
-Cấu trúc JSON:
+Ví dụ: 4 nhóm "Thuộc tính phức hợp", "Thuộc tính đa trị", ... mỗi nhóm chứa nhiều items.
+Cuấu trúc JSON:
 {
   "type": "groupdrag",
   "question": "Phân loại các thành phần vào nhóm thích hợp",
   "groups": [
-    { "name": "Kiểu thực thể", "items": ["Mặt hàng", "Nhân viên"] },
-    { "name": "Thuộc tính",    "items": ["Chủng loại", "Giá bán", "Mã nhân viên", "Ngày sinh"] }
+    { "name": "Thực thể", "items": ["NHAN_VIEN", "SAN_PHAM"] },
+    { "name": "Thuộc tính", "items": ["HO_TEN", "DIA_CHI", "MA_NV"] }
   ],
   "points": 1
 }
 
-⚠️ CHÚ Ý PHÂN BIỆT DRAG vs GROUPDRAG:
-- DRAG: mỗi hàng trong bảng = 1 cặp (hàng trái ↔ hàng phải của cùng hàng đó), các cặp không liên quan nhau
-- GROUPDRAG: có nhóm/tiêu đề, nhiều items thuộc cùng 1 nhóm, items được kéo tự do vào nhóm
-- Nếu bảng 2 cột mà mỗi hàng là 1 cặp riêng → DRAG
-- Nếu có tiêu đề nhóm và nhiều mục dưới mỗi nhóm → GROUPDRAG
-
---- DẠNG 7: CLOZEDRAG (Kéo từ vào đoạn văn) ---
-Nhận dạng: Đoạn văn có nhiều chỗ trống ___ và có danh sách từ để kéo thả. Số lượng từ phải khớp số lượng ___.
-Cấu trúc JSON:
+--- DẠNG 7: CLOZEDRAG (Kéo vào đoạn văn) ---
+Nhận dạng: Đoạn văn có nhiều chỗ trống ___ cần điền từ bank đáp án đưa ra sẵn.
+Cuấu trúc JSON:
 {
   "type": "clozedrag",
-  "question": "Đoạn văn với các ___ cần điền",
-  "answers": ["từ 1", "từ 2", "từ 3"],
+  "question": "Đoạn văn có ___ và ___ để điền",
+  "answers": ["Đáp 1", "Đáp 2"],
   "points": 1
 }
-"answers": mảng các từ điền đúng theo thứ tự xuất hiện của ___.
 
---- DẠNG 8: ORDER (Sắp xếp) ---
-Nhận dạng: Yêu cầu sắp xếp các mục/bước/từ theo thứ tự đúng.
-Cấu trúc JSON:
+--- DẠNG 8: ORDER (Sắp xếp thứ tự) ---
+Nhận dạng: Yêu cầu sắp xếp các bước/mục theo thứ tự đúng.
+Cuấu trúc JSON:
 {
   "type": "order",
-  "question": "Sắp xếp các bước dưới đây theo thứ tự đúng",
-  "items": ["Mục 1 (thứ tự đúng)", "Mục 2", "Mục 3"],
+  "question": "Sắp xếp các bước",
+  "items": ["Bước 1", "Bước 2", "Bước 3"],
+  "correctOrder": [0, 1, 2],
   "points": 1
 }
-"items": mảng các mục THEO THỨ TỰ ĐÚNG (đã sắp xếp sẵn).
 
---- DẠNG 9: MULTITRUEFALSE (Đúng/Sai Nhiều Phát Biểu) ---
-Nhận dạng: 1 câu dẫn kèm NHIỀU phát biểu con (thường 2-4 phát biểu), mỗi phát biểu yêu cầu xác định Đúng hoặc Sai RIÊNG LẺ.
-Dấu hiệu: Câu dẫn có cụm "phát biểu nào sau đây là đúng/sai", "xác định đúng/sai", hoặc có danh sách 1)/2)/3)/4) kèm "Sai"/"Đúng" bên cạnh.
-Ví dụ trong file Word:
-  Câu 20: Về kiểu thực thể và thuộc tính, phát biểu nào sau đây là đúng/sai?
-  1) Một thực thể có thể có nhiều thuộc tính khóa      Sai / Đúng (đáp án: Đúng)
-  2) Mỗi kiểu thực thể phải có ít nhất một thuộc tính  Sai / Đúng (đáp án: Đúng)
-  3) Thuộc tính có thể không có tên trong sơ đồ         Đúng / Sai (đáp án: Sai)
-  4) Thuộc tính khóa không cần thiết trong mọi kiểu thể Đúng / Sai (đáp án: Sai)
-→ Đây là MULTITRUEFALSE vì có NHIỀU phát biểu con, mỗi phát biểu có đáp án riêng.
-Cấu trúc JSON:
+--- DẠNG 9: MULTITRUEFALSE (Đúng/Sai nhiều phát biểu) ---
+Nhận dạng: 1 câu hỏi gốc kèm tối đa 4 phát biểu con, mỗi phát biểu cần xác nhận Đúng hoặc Sai riêng lẻ.
+Nhận dạng: Có danh sách 1)/2)/3)/4) kèm "Đúng"/"Sai" bên cạnh, hoặc có cụm "đúng hay sai", "xem các phát biểu".
+Cuấu trúc JSON:
 {
   "type": "multitruefalse",
-  "question": "Về kiểu thực thể và thuộc tính, hãy xác định các phát biểu sau đây là Đúng hay Sai:",
+  "question": "Câu hỏi gốc",
   "statements": [
-    { "text": "Một thực thể có thể có nhiều thuộc tính khóa", "correct": true },
-    { "text": "Mỗi kiểu thực thể phải có ít nhất một thuộc tính", "correct": true },
-    { "text": "Thuộc tính có thể không có tên trong sơ đồ thực thể kết hợp", "correct": false },
-    { "text": "Thuộc tính khóa không cần thiết trong mọi kiểu thực thể", "correct": false }
+    { "text": "Phát biểu 1", "correct": true },
+    { "text": "Phát biểu 2", "correct": false }
   ],
   "points": 1
 }
-"statements": mảng tối đa 4 phát biểu, mỗi phần tử có "text" (nội dung) và "correct" (true=Đúng, false=Sai).
 
-⚠️ PHÂN BIỆT MULTITRUEFALSE vs TRUEFALSE:
-- TRUEFALSE: CHỈ 1 phát biểu duy nhất, chọn Đúng hoặc Sai cho cả câu
-- MULTITRUEFALSE: CÓ NHIỀU phát biểu con (2-4 phát biểu), mỗi phát biểu có đáp án riêng
-
-QUY TẮC CHUNG:
-1. Nhận dạng tất cả câu hỏi dù định dạng không chuẩn.
-2. Xóa nhãn thừa: "Câu 1:", "A.", "1)", khoảng trắng đầu/cuối.
-3. Xác định đáp án đúng dựa vào: nhãn (*), in đậm, gạch dưới, màu, dòng "Answers: X", hoặc "Key: X".
-4. Không bịa thêm câu hỏi ngoài văn bản.
-5. Trả về DUY NHẤT mảng JSON hợp lệ, không giải thích thêm.`;
-
+QUY TẮc CHUNG:
+- Trả về DUY NHẤT mảng JSON hợp lệ, không gải thích ngoài.
+- Bỏ qua tiêu đề, hướng dẫn chung, chỉ lấy câu hỏi.
+- Giữ nguyên ngôn ngữ gốc (Tiếng Việt/Anh) của văn bản.`;
 
   function splitIntoChunks(text) {
     const lines = text.split('\n');
@@ -472,75 +508,105 @@ QUY TẮC CHUNG:
     return [];
   }
 
-  function normalizeQuestion(q) {
+  function normalizeQuestion(q, imgSeq) {
     const type = q.type || 'single';
-    const questionText = (q.question || '').trim();
     const points = Number(q.points) || 1;
 
-    // Gắp ảnh nếu imageMap có entry khớp
-    let image = '';
-    const qKey = questionText.slice(0, 60).toLowerCase();
-    for (const [k, src] of Object.entries(imageMap)) {
-      if (qKey.includes(k.toLowerCase().slice(0, 40))) { image = src; break; }
+    // ── Resolve [IMG_N] placeholder → base64 src ──────────────
+    function resolveImgPlaceholder(text) {
+      if (!text || !imgSeq || imgSeq.length === 0) return text;
+      return text.replace(/\[IMG_(\d+)\]/gi, (_, n) => {
+        const idx = parseInt(n, 10) - 1;
+        if (idx >= 0 && idx < imgSeq.length) {
+          return `<img src="${imgSeq[idx].src}" style="max-width:100%;vertical-align:middle;" />`;
+        }
+        return _;
+      });
     }
 
-    const base = { type, question: questionText, image, points };
+    function extractFirstImgSrc(text) {
+      // If entire option is [IMG_N], extract as image src
+      if (!text || !imgSeq || imgSeq.length === 0) return { text: text || '', imgSrc: '' };
+      const m = text.match(/^\[IMG_(\d+)\]$/i);
+      if (m) {
+        const idx = parseInt(m[1], 10) - 1;
+        if (idx >= 0 && idx < imgSeq.length) {
+          return { text: '', imgSrc: imgSeq[idx].src };
+        }
+      }
+      // Mixed text + images — resolve inline
+      return { text: resolveImgPlaceholder(text), imgSrc: '' };
+    }
+
+    // Resolve question text and extract question-level image
+    const rawQuestion = (q.question || '').trim();
+    const { text: questionText, imgSrc: questionImgSrc } = extractFirstImgSrc(rawQuestion);
+    const questionResolved = questionImgSrc ? '' : resolveImgPlaceholder(rawQuestion);
+
+    // Legacy imageMap matching (fast mode)
+    let legacyImage = '';
+    const qKey = (questionResolved || rawQuestion).slice(0, 60).toLowerCase();
+    for (const [k, src] of Object.entries(imageMap)) {
+      if (qKey.includes(k.toLowerCase().slice(0, 40))) { legacyImage = src; break; }
+    }
+
+    const image = questionImgSrc || legacyImage || '';
+    const base = { type, question: questionResolved || questionText, image, points };
 
     // ── SINGLE ────────────────────────────────────────────────
     if (type === 'single') {
-      const options = Array.isArray(q.options) ? q.options.map(o => String(o).trim()) : [];
+      const rawOpts = Array.isArray(q.options) ? q.options : [];
+      const resolvedOpts = rawOpts.map(o => extractFirstImgSrc(String(o).trim()));
+      const options = resolvedOpts.map(r => r.text);
+      const optionImages = resolvedOpts.map(r => r.imgSrc);
       let correct = typeof q.correct === 'number' ? q.correct : 0;
       let needsReview = !!q._needsReview;
-      if (options.length < 2) needsReview = true;
+      if (options.filter(o => o || optionImages[options.indexOf(o)]).length < 2) needsReview = true;
       if (correct < 0 || correct >= options.length) { correct = 0; needsReview = true; }
-      return { ...base, options, optionImages: options.map(() => ''), correct, _needsReview: needsReview };
+      return { ...base, options, optionImages, correct, _needsReview: needsReview };
     }
 
     // ── MULTISELECT ───────────────────────────────────────────
     if (type === 'multiselect') {
-      const options = Array.isArray(q.options) ? q.options.map(o => String(o).trim()) : [];
+      const rawOpts = Array.isArray(q.options) ? q.options : [];
+      const resolvedOpts = rawOpts.map(o => extractFirstImgSrc(String(o).trim()));
+      const options = resolvedOpts.map(r => r.text);
+      const optionImages = resolvedOpts.map(r => r.imgSrc);
       const corrects = Array.isArray(q.corrects) ? q.corrects.filter(Number.isInteger) : [];
       const needsReview = corrects.length === 0;
-      return { ...base, options, optionImages: options.map(() => ''), corrects, _needsReview: needsReview };
+      return { ...base, options, optionImages, corrects, _needsReview: needsReview };
     }
 
-    // ── FILL (điền từ) ─────────────────────────────────────────
+    // ── FILL (điền từ) ───────────────────────────────────────────────
     if (type === 'fill') {
       const answer = String(q.answer || '').trim();
-      let question = questionText;
+      let question = resolveImgPlaceholder(base.question);
       if (!question.includes('___')) question += ' ___';
       const needsReview = !answer;
       return { ...base, question, answer, answers: answer ? [answer] : [], _needsReview: needsReview };
     }
 
-    // ── CLOZEDRAG (kéo vào đoạn văn) ──────────────────────────
+    // ── CLOZEDRAG (kéo vào đoạn văn) ─────────────────────────
     if (type === 'clozedrag') {
       const answers = Array.isArray(q.answers) ? q.answers.map(a => String(a).trim()) : [];
-      let question = questionText;
-      // Đảm bảo số ___ khớp answers
+      let question = resolveImgPlaceholder(base.question);
       const blankCount = (question.match(/___/g) || []).length;
-      if (blankCount === 0 && answers.length > 0) {
-        question = question + ' ' + answers.map(() => '___').join(' ');
-      }
+      if (blankCount === 0 && answers.length > 0) question = question + ' ' + answers.map(() => '___').join(' ');
       const needsReview = answers.length === 0;
       return { ...base, question, answers, _needsReview: needsReview };
     }
 
-    // ── TRUEFALSE ─────────────────────────────────────────────
+    // ── TRUEFALSE ──────────────────────────────────────────────────
     if (type === 'truefalse') {
       let correct;
-      if (typeof q.correct === 'boolean') {
-        correct = q.correct;
-      } else if (typeof q.correct === 'string') {
-        correct = /^(true|đúng|yes|1)$/i.test(q.correct.trim());
-      } else {
-        correct = true; // default, mark needsReview
-      }
+      if (typeof q.correct === 'boolean') correct = q.correct;
+      else if (typeof q.correct === 'string') correct = /^(true|đúng|yes|1)$/i.test(q.correct.trim());
+      else correct = true;
       const needsReview = q.correct === null || q.correct === undefined || !!q._needsReview;
       return { ...base, correct, _needsReview: needsReview };
     }
 
-    // ── DRAG (ghép cặp 1-1) ─────────────────────────────────
+    // ── DRAG (ghép cặp 1-1) ─────────────────────────────────────
     if (type === 'drag') {
       const pairs = Array.isArray(q.pairs)
         ? q.pairs.filter(p => p.left || p.right).map(p => ({ left: String(p.left || '').trim(), right: String(p.right || '').trim() }))
@@ -549,7 +615,7 @@ QUY TẮC CHUNG:
       return { ...base, pairs, _needsReview: needsReview };
     }
 
-    // ── GROUPDRAG (phân loại nhóm) ──────────────────────────
+    // ── GROUPDRAG (phân loại nhóm) ────────────────────────────
     if (type === 'groupdrag') {
       const groups = Array.isArray(q.groups)
         ? q.groups.map(g => ({
@@ -561,7 +627,7 @@ QUY TẮC CHUNG:
       return { ...base, groups, _needsReview: needsReview };
     }
 
-    // ── ORDER (sắp xếp) ────────────────────────────────────
+    // ── ORDER (sắp xếp) ──────────────────────────────────────────
     if (type === 'order') {
       const items = Array.isArray(q.items)
         ? q.items.map(i => String(i).trim()).filter(Boolean)
@@ -570,7 +636,7 @@ QUY TẮC CHUNG:
       return { ...base, items, _needsReview: needsReview };
     }
 
-    // ── MULTITRUEFALSE (đúng/sai nhiều phát biểu) ─────────
+    // ── MULTITRUEFALSE (đúng/sai nhiều phát biểu) ──────────────
     if (type === 'multitruefalse') {
       const statements = Array.isArray(q.statements)
         ? q.statements
@@ -587,26 +653,34 @@ QUY TẮC CHUNG:
     }
 
     // Fallback -> single
-    return {
-      ...base,
-      type: 'single',
-      options: [],
-      optionImages: [],
-      correct: 0,
-      _needsReview: true,
-    };
+    return { ...base, type: 'single', options: [], optionImages: [], correct: 0, _needsReview: true };
   }
 
   const chunks = splitIntoChunks(rawText);
   if (chunks.length === 0) return [];
 
+  // Phân phối ảnh theo chunk: tìm [IMG_N] trong chunk để lấy ảnh tương ứng gửi kèm
+  function getImagesForChunk(chunkText) {
+    if (!imageSequence || imageSequence.length === 0) return [];
+    const refs = [...chunkText.matchAll(/\[IMG_(\d+)\]/gi)].map(m => parseInt(m[1], 10) - 1);
+    const uniqueIdxs = [...new Set(refs)].filter(i => i >= 0 && i < imageSequence.length);
+    return uniqueIdxs.map(i => ({ mimeType: imageSequence[i].mimeType, data: imageSequence[i].data }));
+  }
+
   const allQuestions = [];
   for (let i = 0; i < chunks.length; i++) {
     if (onProgress) onProgress(i, chunks.length);
+    const chunkImages = getImagesForChunk(chunks[i]);
     const prompt = `Văn bản đề thi (phần ${i + 1}/${chunks.length}):\n\n${chunks[i]}\n\nHãy bóc tách tất cả câu hỏi, phân loại đúng dạng, xác định đáp án và trả về mảng JSON.`;
     try {
-      const responseText = await callGemini(prompt, systemInstruction, true, { maxOutputTokens: 8192, temperature: 0.1 });
-      parseAIJsonArray(responseText).forEach(q => allQuestions.push(normalizeQuestion(q)));
+      let responseText;
+      if (chunkImages.length > 0) {
+        // Gửi Vision request kèm ảnh
+        responseText = await callGeminiWithImages(prompt, chunkImages, systemInstruction, true, { maxOutputTokens: 8192, temperature: 0.1 });
+      } else {
+        responseText = await callGemini(prompt, systemInstruction, true, { maxOutputTokens: 8192, temperature: 0.1 });
+      }
+      parseAIJsonArray(responseText).forEach(q => allQuestions.push(normalizeQuestion(q, imageSequence)));
     } catch (err) {
       console.error(`[parseWordContentWithAI] Chunk ${i + 1} lỗi:`, err);
     }
@@ -614,6 +688,8 @@ QUY TẮC CHUNG:
   if (onProgress) onProgress(chunks.length, chunks.length);
   return allQuestions;
 };
+
+
 
 /**
  * Sử dụng AI để suy luận đáp án đúng cho danh sách câu hỏi bị thiếu (_needsReview: true).

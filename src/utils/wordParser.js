@@ -408,7 +408,7 @@ export async function analyzeWordFileWithAI(file, onProgress = null) {
       try {
         const arrayBuffer = ev.target.result;
 
-        // Chuyển đổi sang HTML bằng mammoth (để lấy ảnh base64)
+        // ─── Bước 1: Chuyển sang HTML bằng mammoth (ảnh → base64 inline) ───
         const mammothOptions = {
           styleMap: ['highlight => mark', 'b => strong', 'u => u'],
           convertImage: mammoth.images.imgElement(async (image) => {
@@ -420,14 +420,37 @@ export async function analyzeWordFileWithAI(file, onProgress = null) {
         const result = await mammoth.convertToHtml({ arrayBuffer }, mammothOptions);
         const html = result.value;
 
+        // ─── Bước 2: Trích xuất ảnh theo thứ tự xuất hiện ───────────────────
+        // imageSequence: mảng { mimeType, data, src } theo thứ tự [IMG_1], [IMG_2]...
+        const imageSequence = [];
+        const imgRegex = /<img[^>]+src="(data:([^;]+);base64,([^"]+))"[^>]*>/gi;
+        let imgMatch;
+        // Map src → index để tránh trùng (cùng ảnh xuất hiện nhiều lần)
+        const srcToIndex = new Map();
+
+        // Xây dựng plainText với [IMG_N] placeholder thay cho <img>
+        let processedHtml = html.replace(/<img[^>]+src="(data:([^;]+);base64,([^"]+))"[^>]*>/gi, (fullMatch, src, mimeType, b64Data) => {
+          let idx;
+          if (srcToIndex.has(src)) {
+            idx = srcToIndex.get(src);
+          } else {
+            imageSequence.push({ mimeType, data: b64Data, src });
+            idx = imageSequence.length; // 1-based
+            srcToIndex.set(src, idx);
+          }
+          return ` [IMG_${idx}] `;
+        });
+
         // Trích xuất plain text (giữ newline block elements)
-        const plainText = html
-          .replace(/<\/p>|<br\s*\/?>|<\/li>|<\/div>/gi, '\n')
+        const plainText = processedHtml
+          .replace(/<\/p>|<br\s*\/?>|<\/li>|<\/div>|<\/tr>|<\/td>/gi, '\n')
           .replace(/<[^>]+>/g, '')
           .replace(/\n{3,}/g, '\n\n')
+          .replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
           .trim();
 
         console.log('[analyzeWordFileWithAI] plainText length:', plainText.length);
+        console.log('[analyzeWordFileWithAI] images extracted:', imageSequence.length);
         console.log('[analyzeWordFileWithAI] plainText preview:', plainText.slice(0, 500));
 
         if (!plainText || plainText.length < 20) {
@@ -435,18 +458,15 @@ export async function analyzeWordFileWithAI(file, onProgress = null) {
           return;
         }
 
-        // Trích xuất map ảnh: { questionPrefix -> base64Src }
+        // ─── Bước 3: Legacy imageMap (cho fast-mode compat) ─────────────────
         const imageMap = {};
-        const imgMatches = [...html.matchAll(/<img[^>]+src="([^"]+)"[^>]*>/gi)];
-        imgMatches.forEach((m) => {
-          const src = m[1];
-          const afterImg = html.slice(m.index + m[0].length, m.index + m[0].length + 200)
-            .replace(/<[^>]+>/g, '').trim().slice(0, 60).toLowerCase();
-          if (afterImg) imageMap[afterImg] = src;
+        imageSequence.forEach((img, i) => {
+          const key = `[img_${i + 1}]`;
+          imageMap[key] = img.src;
         });
 
-        // Gọi AI bóc tách
-        const questions = await parseWordContentWithAI(plainText, imageMap, onProgress);
+        // ─── Bước 4: Gọi AI Vision bóc tách (kèm imageSequence) ─────────────
+        const questions = await parseWordContentWithAI(plainText, imageMap, onProgress, imageSequence);
         console.log('[analyzeWordFileWithAI] AI returned questions:', questions.length);
 
         resolve({ format: 'ai', questions, sections: [] });
