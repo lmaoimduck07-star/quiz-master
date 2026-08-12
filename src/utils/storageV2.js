@@ -40,6 +40,40 @@ export function subscribeSubjectsV2(callback) {
   }, (err) => console.error('[StorageV2] subscribeSubjects error:', err));
 }
 
+/**
+ * subscribeSubjectsWithExams — Lắng nghe realtime đồng thời subjectsV2 & examsV2.
+ * Tự động merge exams vào subject tương ứng.
+ * Mỗi khi Admin toggle isLocked / isMaintenance, callback sẽ được gọi lại ngay lập tức.
+ */
+export function subscribeSubjectsWithExams(callback) {
+  let latestSubjects = [];
+  let latestExams = [];
+
+  const merge = () => {
+    const merged = latestSubjects.map(s => ({
+      ...s,
+      exams: latestExams.filter(e => e.subjectId === s.id),
+    }));
+    callback(merged);
+  };
+
+  const unsubSubjects = onSnapshot(collection(db, 'subjectsV2'), (snap) => {
+    latestSubjects = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    merge();
+  }, (err) => console.error('[StorageV2] subscribeSubjectsWithExams (subjects) error:', err));
+
+  const unsubExams = onSnapshot(collection(db, 'examsV2'), (snap) => {
+    latestExams = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    merge();
+  }, (err) => console.error('[StorageV2] subscribeSubjectsWithExams (exams) error:', err));
+
+  // Trả về hàm unsubscribe hủy cả 2 listener
+  return () => {
+    unsubSubjects();
+    unsubExams();
+  };
+}
+
 // ─────────────────────────────────────────────
 // EXAMS V2 (Top-level, tham chiếu subjectId)
 // ─────────────────────────────────────────────
@@ -61,6 +95,18 @@ export async function loadExamsV2(subjectId = null) {
   }
 }
 
+/** Fetch tươi 1 exam document từ Firestore — dùng để verify lock/maintenance ngay trước khi bắt đầu thi */
+export async function getExamV2(examId) {
+  try {
+    const snap = await getDoc(doc(db, 'examsV2', examId));
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() };
+  } catch (e) {
+    console.error('[StorageV2] getExam error:', e);
+    return null;
+  }
+}
+
 export async function saveExamV2(exam) {
   try {
     await setDoc(doc(db, 'examsV2', exam.id), exam, { merge: true });
@@ -69,8 +115,34 @@ export async function saveExamV2(exam) {
   }
 }
 
+export async function toggleExamLockV2(examId, currentIsLocked) {
+  try {
+    await setDoc(doc(db, 'examsV2', examId), { isLocked: !currentIsLocked }, { merge: true });
+  } catch (e) {
+    console.error('[StorageV2] toggleExamLock error:', e);
+  }
+}
+
+export async function toggleExamMaintenanceV2(examId, currentIsMaintenance) {
+  try {
+    await setDoc(doc(db, 'examsV2', examId), { isMaintenance: !currentIsMaintenance }, { merge: true });
+  } catch (e) {
+    console.error('[StorageV2] toggleExamMaintenance error:', e);
+  }
+}
+
 export async function deleteExamV2(examId) {
   try {
+    // 1. Xóa toàn bộ questions trong subcollection trước
+    //    (nếu không xóa, Firestore để lại ghost document)
+    const qCol = collection(db, 'examsV2', examId, 'questions');
+    const existing = await getDocs(qCol);
+    if (existing.size > 0) {
+      const batch = writeBatch(db);
+      existing.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+    // 2. Xóa document exam cha
     await deleteDoc(doc(db, 'examsV2', examId));
   } catch (e) {
     console.error('[StorageV2] deleteExam error:', e);
@@ -227,7 +299,9 @@ export async function deleteCodingProblemV2(problemId) {
 // ─────────────────────────────────────────────
 export const storageV2 = {
   loadSubjectsV2, saveSubjectV2, deleteSubjectV2, subscribeSubjectsV2,
-  loadExamsV2, saveExamV2, deleteExamV2, subscribeExamsV2,
+  subscribeSubjectsWithExams,
+  loadExamsV2, saveExamV2, deleteExamV2, getExamV2, subscribeExamsV2,
+  toggleExamLockV2, toggleExamMaintenanceV2,
   loadQuestionsV2, saveQuestionsV2, subscribeQuestionsV2,
   loadCodingProblemsV2, saveCodingProblemV2, deleteCodingProblemV2,
   updateActiveSessionV2, saveAnswerDeltaV2, subscribeSingleSessionV2, deleteFullSessionV2,

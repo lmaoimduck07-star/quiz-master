@@ -1,7 +1,7 @@
-import { FileText, Pencil, Clock, HelpCircle, Play, Trash2 } from 'lucide-react';
+import { FileText, Pencil, Clock, HelpCircle, Play, Trash2, Lock, Unlock, Wrench, CheckCircle } from 'lucide-react';
 import { Button } from '../ui/Button';
 
-export default function ExamCard({ exam, isCompleted, onDelete, onEdit, onPlay }) {
+export default function ExamCard({ exam, isCompleted, onDelete, onEdit, onPlay, onToggleLock, onToggleMaintenance }) {
   
   const handleRename = () => {
     let newName = prompt("Nhập tên mới cho bài thi này:", exam.config.title);
@@ -10,26 +10,39 @@ export default function ExamCard({ exam, isCompleted, onDelete, onEdit, onPlay }
     }
   };
 
+  const isLocked = !!exam.isLocked;
+  const isMaintenance = !!exam.isMaintenance;
+
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 md:p-5 transition hover:shadow-md hover:border-primary dark:hover:border-blue-500 flex flex-col md:flex-row items-center justify-between gap-4 group w-full transition-colors">
+    <div className={`bg-white dark:bg-slate-900 border ${isLocked ? 'border-red-300 dark:border-red-900/60 bg-red-50/20' : isMaintenance ? 'border-amber-300 dark:border-amber-900/60 bg-amber-50/20' : 'border-slate-200 dark:border-slate-800'} rounded-2xl p-4 md:p-5 transition hover:shadow-md hover:border-primary dark:hover:border-blue-500 flex flex-col md:flex-row items-center justify-between gap-4 group w-full transition-colors`}>
       
       {/* KHỐI TRÁI: ICON VÀ TIÊU ĐỀ */}
       <div className="flex items-center gap-3.5 flex-1 min-w-0">
-        <div className="p-2.5 rounded-xl flex-shrink-0 bg-primary/10 dark:bg-blue-900/30 text-primary dark:text-blue-400 shadow-inner">
+        <div className={`p-2.5 rounded-xl flex-shrink-0 ${isLocked ? 'bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400' : isMaintenance ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400' : 'bg-primary/10 dark:bg-blue-900/30 text-primary dark:text-blue-400'} shadow-inner`}>
           <FileText className="h-5 w-5" />
         </div>
         <div className="min-w-0">
-          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 m-0 flex items-center gap-2">
+          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 m-0 flex items-center gap-2 flex-wrap">
             <span className="truncate" title={exam.config.title}>{exam.config.title}</span>
             {exam.code && (
               <span className="text-[10px] font-black font-mono bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800/50 shrink-0">
                 {exam.code}
               </span>
             )}
+            {isLocked && (
+              <span className="text-[10px] font-black bg-red-500 text-white px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0">
+                <Lock className="h-3 w-3" /> 🔒 Đã khóa
+              </span>
+            )}
+            {isMaintenance && (
+              <span className="text-[10px] font-black bg-amber-500 text-white px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0">
+                <Wrench className="h-3 w-3" /> 🚧 Bảo trì
+              </span>
+            )}
             {!isCompleted && (
               <button 
                 onClick={handleRename}
-                className="opacity-0 group-hover:opacity-100 transition text-slate-400 hover:text-amber-500 bg-slate-50 dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg p-1.5 flex-shrink-0"
+                className="opacity-0 group-hover:opacity-100 transition text-slate-400 hover:text-amber-500 bg-slate-50 dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg p-1.5 flex-shrink-0 cursor-pointer"
                 title="Đổi tên bài thi"
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -38,7 +51,7 @@ export default function ExamCard({ exam, isCompleted, onDelete, onEdit, onPlay }
           </h3>
           
           {/* Thông tin phụ nằm ngay dưới tiêu đề */}
-          <div className="flex items-center gap-3 text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1.5">
+          <div className="flex items-center gap-3 text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1.5 flex-wrap">
             <span className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-350 px-2.5 py-0.5 rounded-md border border-amber-100 dark:border-amber-900/30">
               <Clock className="h-3.5 w-3.5" /> {exam.config.time > 0 ? `${exam.config.time} phút` : 'Làm tự do'}
             </span>
@@ -50,11 +63,45 @@ export default function ExamCard({ exam, isCompleted, onDelete, onEdit, onPlay }
       </div>
 
       {/* KHỐI PHẢI: CÁC NÚT HÀNH ĐỘNG */}
-      <div className="flex gap-2.5 flex-shrink-0 w-full md:w-auto">
+      <div className="flex gap-2 flex-wrap items-center flex-shrink-0 w-full md:w-auto justify-end">
+        {/* Nút Khóa Đề */}
+        {!isCompleted && (
+          <button
+            type="button"
+            onClick={() => onToggleLock && onToggleLock(exam.id, isLocked)}
+            className={`h-9 px-3 rounded-xl font-bold text-xs flex items-center gap-1.5 border transition cursor-pointer ${
+              isLocked 
+                ? 'bg-red-600 hover:bg-red-700 text-white border-transparent shadow-sm' 
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-red-50 hover:text-red-600 border-slate-200 dark:border-slate-700'
+            }`}
+            title={isLocked ? "Mở khóa đề thi này" : "Khóa đề thi này"}
+          >
+            {isLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+            {isLocked ? 'Mở khóa' : 'Khóa đề'}
+          </button>
+        )}
+
+        {/* Nút Bảo trí Đề */}
+        {!isCompleted && (
+          <button
+            type="button"
+            onClick={() => onToggleMaintenance && onToggleMaintenance(exam.id, isMaintenance)}
+            className={`h-9 px-3 rounded-xl font-bold text-xs flex items-center gap-1.5 border transition cursor-pointer ${
+              isMaintenance 
+                ? 'bg-amber-600 hover:bg-amber-700 text-white border-transparent shadow-sm' 
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-amber-50 hover:text-amber-600 border-slate-200 dark:border-slate-700'
+            }`}
+            title={isMaintenance ? "Hoàn tất bảo trì" : "Đưa đề thi vào bảo trì"}
+          >
+            <Wrench className="h-3.5 w-3.5" />
+            {isMaintenance ? 'Bỏ bảo trì' : 'Bảo trì đề'}
+          </button>
+        )}
+
         <Button 
           variant="success"
           onClick={() => onPlay(exam.id)}
-          className="h-9 px-5 font-black rounded-xl text-xs gap-1.5 shadow-sm border-transparent"
+          className="h-9 px-4 font-black rounded-xl text-xs gap-1.5 shadow-sm border-transparent"
         >
           <Play className="h-3.5 w-3.5 fill-current" /> LÀM BÀI
         </Button>
@@ -63,9 +110,9 @@ export default function ExamCard({ exam, isCompleted, onDelete, onEdit, onPlay }
           <Button 
             variant="outline"
             onClick={() => onEdit(exam.id, null)} 
-            className="h-9 px-4 font-bold rounded-xl text-xs border-primary dark:border-blue-600 text-primary dark:text-blue-400 hover:bg-primary/5 dark:hover:bg-blue-900/10 gap-1.5 bg-transparent"
+            className="h-9 px-3 font-bold rounded-xl text-xs border-primary dark:border-blue-600 text-primary dark:text-blue-400 hover:bg-primary/5 dark:hover:bg-blue-900/10 gap-1.5 bg-transparent"
           >
-            <Pencil className="h-3.5 w-3.5" /> Sửa Đề
+            <Pencil className="h-3.5 w-3.5" /> Sửa
           </Button>
         )}
         

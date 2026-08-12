@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   BookOpen, Play, Trophy, Target,
   ChevronRight, Loader2, X,
-  ShieldAlert, Eye, Wrench
+  ShieldAlert, Eye, Wrench, Clock, Lock
 } from 'lucide-react';
 import MobileNavbar from '../../components/mobile/MobileNavbar';
 import { useClientDashboardLogic } from '../../hooks/useClientDashboardLogic';
@@ -175,7 +175,7 @@ function SimConfirmModal({ code, enteredCode, onChange, onConfirm, onClose }) {
 }
 
 // ── Practice List Modal (Bottom Sheet) ──
-function PracticeListModal({ subject, onStart, onClose }) {
+function PracticeListModal({ subject, onStart, onClose, isUnlimited, cooldownRemaining, cooldownFormatted }) {
   const exams = subject?.exams || [];
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
@@ -187,34 +187,72 @@ function PracticeListModal({ subject, onStart, onClose }) {
             <X className="w-4 h-4 text-slate-500" />
           </button>
         </div>
+
         <div className="overflow-y-auto px-4 py-3 space-y-2 flex-1">
+          {!isUnlimited && cooldownRemaining > 0 && (
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 rounded-xl text-xs font-semibold flex items-center gap-2 mb-2 border border-amber-200 dark:border-amber-800">
+              <Clock className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span>
+                Thời gian chờ (10 phút): Thử lại sau{' '}
+                <strong className="font-mono text-amber-900 dark:text-amber-200 text-sm">{cooldownFormatted}</strong>
+              </span>
+            </div>
+          )}
+
           {exams.length === 0 ? (
             <p className="text-sm text-slate-400 text-center py-8">Chưa có bộ đề nào.</p>
           ) : (
-            exams.map((exam) => (
-              <button
-                key={exam.id}
-                onClick={() => onStart(subject, exam)}
-                className="w-full flex items-center justify-between px-4 py-3 rounded-xl
-                           bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50
-                           text-left active:scale-[0.98] transition-all duration-150"
-                style={{ minHeight: 56 }}
-              >
-                <div>
-                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                    {exam.config?.title || exam.title || 'Bài thi'}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-0.5">{exam.questions?.length || exam.questionCount || 0} câu hỏi</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400" />
-              </button>
-            ))
+            exams.map((exam) => {
+              const isLocked = !!exam.isLocked;
+              const isMaintenance = !!exam.isMaintenance;
+              const isBlocked = isLocked || isMaintenance || (!isUnlimited && cooldownRemaining > 0);
+
+              return (
+                <button
+                  key={exam.id}
+                  disabled={isBlocked}
+                  onClick={() => onStart(subject, exam)}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-left transition-all duration-150 ${
+                    isBlocked
+                      ? 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 opacity-60 cursor-not-allowed'
+                      : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/50 active:scale-[0.98]'
+                  }`}
+                  style={{ minHeight: 56 }}
+                >
+                  <div className="flex-1 pr-2 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                        {exam.config?.title || exam.title || 'Bài thi'}
+                      </p>
+                      {isLocked && (
+                        <span className="text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 px-1.5 py-0.5 rounded border border-red-200 dark:border-red-800">
+                          🔒 Đã khóa
+                        </span>
+                      )}
+                      {isMaintenance && (
+                        <span className="text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800">
+                          🚧 Bảo trì
+                        </span>
+                      )}
+                      {!isUnlimited && cooldownRemaining > 0 && !isLocked && !isMaintenance && (
+                        <span className="text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800 font-mono">
+                          ⏱️ Chờ {cooldownFormatted}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">{exam.questions?.length || exam.questionCount || 0} câu hỏi</p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                </button>
+              );
+            })
           )}
         </div>
       </div>
     </div>
   );
 }
+
 
 // ─── Main Component ───
 export default function ClientDashboardMobile() {
@@ -386,6 +424,9 @@ export default function ClientDashboardMobile() {
           subject={selectedSubject}
           onStart={startPractice}
           onClose={() => setShowPracticeModal(false)}
+          isUnlimited={logic.isUnlimited}
+          cooldownRemaining={logic.cooldownRemaining}
+          cooldownFormatted={logic.cooldownFormatted}
         />
       )}
     </div>

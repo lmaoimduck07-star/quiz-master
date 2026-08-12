@@ -254,8 +254,26 @@ export default function AdminDashboard() {
                       onBack={() => setEditingExamId(null)}
                       onSaveExam={async (examId, config, questions) => {
                         const subjCode = currentSubject.code || (currentSubject.name || 'MON').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9 ]/g, '').split(' ').filter(Boolean).map(w => w[0].toUpperCase()).join('').slice(0, 6);
-                        const examCode = config.code || `${subjCode}_BAI_${Date.now().toString().slice(-4)}`;
-                        const newExamId = examId || examCode.toLowerCase();
+                        
+                        let newExamId = examId;
+                        let examCode = config.code;
+
+                        if (!examId) {
+                          // Tạo ID sequential: đếm số exam hiện có của môn này
+                          const existingExams = await storageV2.loadExamsV2(currentSubject.id);
+                          let nextNum = existingExams.length + 1;
+                          // Đảm bảo không trùng ID
+                          let candidate = `${subjCode.toLowerCase()}_bai_${String(nextNum).padStart(2, '0')}`;
+                          while (existingExams.some(e => e.id === candidate)) {
+                            nextNum++;
+                            candidate = `${subjCode.toLowerCase()}_bai_${String(nextNum).padStart(2, '0')}`;
+                          }
+                          newExamId = candidate;
+                          examCode = config.code || `${subjCode}_BAI_${String(nextNum).padStart(2, '0')}`;
+                        } else {
+                          examCode = config.code || examId.toUpperCase().replace(/_/g, '_');
+                        }
+
                         const newExam = {
                           id: newExamId,
                           subjectId: currentSubject.id,
@@ -275,6 +293,7 @@ export default function AdminDashboard() {
                         addLog('System', `Đã ${examId ? 'cập nhật' : 'tạo mới'} đề thi "${config.title}" [${examCode}] trong môn "${currentSubject.name}" [${subjCode}]`, 'info');
                         setEditingExamId(null);
                       }}
+
                     />
                   );
                 }

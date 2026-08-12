@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { storage } from '../utils/storage';
 import { storageV2 } from '../utils/storageV2';
+import { setPracticeCooldown, isUserUnlimited } from '../utils/cooldownManager';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { AlertTriangle, Clock, Flag, Lock, Play, CheckCircle2, ShieldAlert, Loader2 } from 'lucide-react';
@@ -127,6 +128,7 @@ export default function MockExam() {
   const [warningCount, setWarningCount] = useState(() => savedSession ? savedSession.warningCount : 0);
   const [showWarning, setShowWarning] = useState(false);
   const [warningText, setWarningText] = useState('');
+  const [startingExam, setStartingExam] = useState(false); // loading state khi verify trước khi bắt đầu
   const [showSubmitModal, setShowSubmitModal] = useState(false);
 
   const isSubmittedRef = useRef(false);
@@ -533,8 +535,20 @@ export default function MockExam() {
           correctAnswer.length === userWords.length &&
           correctAnswer.every((item, idx) => userWords[idx] === item);
       }
+      else if (qType === 'multitruefalse') {
+        correctAnswer = q.statements || [];
+        const stmts = q.statements || [];
+        if (stmts.length > 0) {
+          const userMap = userAnswer || {}; // { [index]: boolean }
+          const correctCount2 = stmts.filter((s, idx) => userMap[idx] === s.correct).length;
+          // partial credit: số phát biểu đúng / tổng phát biểu
+          const ratio = correctCount2 / stmts.length;
+          correctCount += ratio; // đóng góp dạng phân số vào tổng
+          isCorrect = ratio === 1;
+        }
+      }
 
-      if (isCorrect) correctCount++;
+      if (qType !== 'multitruefalse' && isCorrect) correctCount++;
 
       return {
         id: q.id,
@@ -547,7 +561,8 @@ export default function MockExam() {
         pairs: q.pairs,
         groups: q.groups,
         answers: q.answers,
-        items: q.items
+        items: q.items,
+        statements: q.statements,
       };
     });
 
@@ -574,6 +589,11 @@ export default function MockExam() {
     results.unshift(newResult);
     localStorage.setItem('qm_exam_results', JSON.stringify(results));
     storage.saveExamResult(newResult);
+
+    // Kích hoạt cooldown 10 phút nếu là bài luyện tập và user không phải Unlimited
+    if ((mode || 'practice') === 'practice' && !isUserUnlimited(currentUser)) {
+      setPracticeCooldown(currentUser?.id);
+    }
 
     // Clear active exam session
     localStorage.removeItem('qm_active_session');
@@ -798,10 +818,39 @@ export default function MockExam() {
             )}
 
             <Button
-              onClick={() => setScreen('quiz')}
-              className="w-full font-black text-lg h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-950/40 transition transform active:scale-98"
+              onClick={async () => {
+                // ── Verify tươi từ Firestore trước khi vào thi ──
+                if (examId) {
+                  setStartingExam(true);
+                  try {
+                    const freshExam = await storageV2.getExamV2(examId);
+                    if (!freshExam) {
+                      alert('❌ Không tìm thấy đề thi này. Vui lòng quay lại trang chủ.');
+                      navigate('/client/dashboard');
+                      return;
+                    }
+                    if (freshExam.isLocked) {
+                      alert('🔒 Đề thi này đã bị Quản trị viên khóa! Vui lòng chọn bài thi khác.');
+                      navigate('/client/dashboard');
+                      return;
+                    }
+                    if (freshExam.isMaintenance) {
+                      alert('🚧 Đề thi đang trong quá trình bảo trì! Vui lòng quay lại sau.');
+                      navigate('/client/dashboard');
+                      return;
+                    }
+                  } catch (err) {
+                    console.warn('[MockExam] Không thể verify exam từ Firestore:', err);
+                  } finally {
+                    setStartingExam(false);
+                  }
+                }
+                setScreen('quiz');
+              }}
+              disabled={startingExam}
+              className="w-full font-black text-lg h-14 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-wait text-white rounded-2xl shadow-xl shadow-emerald-950/40 transition transform active:scale-98"
             >
-              BẮT ĐẦU THI NGAY 🚀
+              {startingExam ? '🔄 Đang kiểm tra...' : 'BẮT ĐẦU THI NGAY 🚀'}
             </Button>
 
             <button onClick={() => navigate('/client/dashboard')} className="text-slate-400 dark:text-slate-400 text-xs font-bold hover:underline">
@@ -1005,6 +1054,38 @@ export default function MockExam() {
                             />
                             <span className="text-base font-extrabold text-slate-700 dark:text-slate-300">{val ? 'ĐÚNG' : 'SAI'}</span>
                           </label>
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  if (qType === 'multitruefalse') {
+                    const stmts = q.statements || [];
+                    const userMap = answers[currentQuestion] || {};
+                    return (
+                      <div className="flex flex-col gap-3">
+                        {stmts.map((stmt, idx) => (
+                          <div key={idx} className="flex items-center gap-3 p-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+                            <span className="flex-1 text-sm font-semibold text-slate-700 dark:text-slate-300">{stmt.text}</span>
+                            <div className="flex gap-2 flex-shrink-0">
+                              <button
+                                onClick={() => setAnswers(prev => ({ ...prev, [currentQuestion]: { ...(prev[currentQuestion] || {}), [idx]: true } }))}
+                                className={`px-4 py-2 rounded-xl font-bold text-sm transition border-2 ${
+                                  userMap[idx] === true
+                                    ? 'bg-emerald-500 text-white border-emerald-500 shadow-md'
+                                    : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-emerald-400 hover:text-emerald-600'
+                                }`}
+                              >Đúng</button>
+                              <button
+                                onClick={() => setAnswers(prev => ({ ...prev, [currentQuestion]: { ...(prev[currentQuestion] || {}), [idx]: false } }))}
+                                className={`px-4 py-2 rounded-xl font-bold text-sm transition border-2 ${
+                                  userMap[idx] === false
+                                    ? 'bg-red-500 text-white border-red-500 shadow-md'
+                                    : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-red-400 hover:text-red-600'
+                                }`}
+                              >Sai</button>
+                            </div>
+                          </div>
                         ))}
                       </div>
                     );

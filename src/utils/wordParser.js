@@ -1,5 +1,6 @@
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
+import { parseWordContentWithAI } from './gemini.js';
 
 // ─────────────────────────────────────────────────────────────
 // OOXML COLOR EXTRACTION — đọc trực tiếp XML trong .docx
@@ -392,6 +393,72 @@ export async function analyzeWordFile(file) {
     reader.readAsArrayBuffer(file);
   });
 }
+
+// ─────────────────────────────────────────────────────────────
+// PUBLIC: analyzeWordFileWithAI — AI-powered parsing bridge
+// Trích xuất text + ảnh bằng mammoth, sau đó gửi cho Gemini AI
+// để bóc tách câu hỏi thông minh hơn parser truyền thống.
+//
+// Returns { format: 'ai', questions, sections: [] }
+// ─────────────────────────────────────────────────────────────
+export async function analyzeWordFileWithAI(file, onProgress = null) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const arrayBuffer = ev.target.result;
+
+        // Chuyển đổi sang HTML bằng mammoth (để lấy ảnh base64)
+        const mammothOptions = {
+          styleMap: ['highlight => mark', 'b => strong', 'u => u'],
+          convertImage: mammoth.images.imgElement(async (image) => {
+            const base64 = await image.read('base64');
+            const src = `data:${image.contentType};base64,${base64}`;
+            return { src };
+          }),
+        };
+        const result = await mammoth.convertToHtml({ arrayBuffer }, mammothOptions);
+        const html = result.value;
+
+        // Trích xuất plain text (giữ newline block elements)
+        const plainText = html
+          .replace(/<\/p>|<br\s*\/?>|<\/li>|<\/div>/gi, '\n')
+          .replace(/<[^>]+>/g, '')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
+
+        console.log('[analyzeWordFileWithAI] plainText length:', plainText.length);
+        console.log('[analyzeWordFileWithAI] plainText preview:', plainText.slice(0, 500));
+
+        if (!plainText || plainText.length < 20) {
+          resolve({ format: 'ai', questions: [], sections: [] });
+          return;
+        }
+
+        // Trích xuất map ảnh: { questionPrefix -> base64Src }
+        const imageMap = {};
+        const imgMatches = [...html.matchAll(/<img[^>]+src="([^"]+)"[^>]*>/gi)];
+        imgMatches.forEach((m) => {
+          const src = m[1];
+          const afterImg = html.slice(m.index + m[0].length, m.index + m[0].length + 200)
+            .replace(/<[^>]+>/g, '').trim().slice(0, 60).toLowerCase();
+          if (afterImg) imageMap[afterImg] = src;
+        });
+
+        // Gọi AI bóc tách
+        const questions = await parseWordContentWithAI(plainText, imageMap, onProgress);
+        console.log('[analyzeWordFileWithAI] AI returned questions:', questions.length);
+
+        resolve({ format: 'ai', questions, sections: [] });
+      } catch (err) {
+        console.error('[analyzeWordFileWithAI] error:', err);
+        reject(err);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 
 export async function parseWordFile(file) {
   return new Promise((resolve, reject) => {

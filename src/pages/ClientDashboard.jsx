@@ -4,6 +4,11 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { storage } from '../utils/storage';
 import { storageV2 } from '../utils/storageV2';
+import {
+  isUserUnlimited,
+  getRemainingCooldownSeconds,
+  formatCooldownTime,
+} from '../utils/cooldownManager';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import {
@@ -32,6 +37,25 @@ export default function ClientDashboard() {
   const [selectedSubject, setSelectedSubject] = useState(null);
   const [showPracticeModal, setShowPracticeModal] = useState(false);
 
+  // Cooldown 10 phút luyện tập theo tài khoản
+  const isUnlimited = isUserUnlimited(currentUser);
+  const [cooldownRemaining, setCooldownRemaining] = useState(() =>
+    currentUser?.id ? getRemainingCooldownSeconds(currentUser.id) : 0
+  );
+
+  useEffect(() => {
+    if (!currentUser?.id || isUnlimited) {
+      setCooldownRemaining(0);
+      return;
+    }
+    const updateCd = () => {
+      setCooldownRemaining(getRemainingCooldownSeconds(currentUser.id));
+    };
+    updateCd();
+    const interval = setInterval(updateCd, 1000);
+    return () => clearInterval(interval);
+  }, [currentUser?.id, isUnlimited]);
+
   // Simulation states
   const [showExamSelectModal, setShowExamSelectModal] = useState(false); // modal chọn đề
   const [showSimModal, setShowSimModal] = useState(false);               // modal xác nhận mã
@@ -53,20 +77,15 @@ export default function ClientDashboard() {
   // Theme
   const { theme, toggleTheme } = useTheme();
 
-  // Load subjects từ Firestore
+  // Subscribe realtime subjects + exams (bao gồm isLocked, isMaintenance)
   useEffect(() => {
     localStorage.removeItem('qm_active_session');
     setIsLoading(true);
-    storage.loadSubjects()
-      .then(data => {
-        setSubjects(data.filter(s => s.isActive !== false));
-      })
-      .catch(err => {
-        console.error('Error loading subjects:', err);
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+    const unsub = storageV2.subscribeSubjectsWithExams((data) => {
+      setSubjects(data.filter(s => s.isActive !== false));
+      setIsLoading(false);
+    });
+    return () => { if (typeof unsub === 'function') unsub(); };
   }, []);
 
   // Load exam results real-time từ Firestore
@@ -163,7 +182,43 @@ export default function ClientDashboard() {
   };
 
   // Launch Practice Test
-  const startPractice = (subject, exam) => {
+  const startPractice = async (subject, exam) => {
+    // Kiểm tra nhanh từ state local trước
+    if (exam.isLocked) {
+      alert('🔒 Đề thi này đã bị Quản trị viên khóa! Vui lòng chọn bài thi khác.');
+      return;
+    }
+    if (exam.isMaintenance) {
+      alert('🚧 Đề thi này đang trong quá trình bảo trì! Vui lòng quay lại sau.');
+      return;
+    }
+    if (!isUnlimited && cooldownRemaining > 0) {
+      alert(`⏱️ Tài khoản đang trong thời gian chờ (10 phút) giữa các lượt luyện tập!\nVui lòng thử lại sau ${formatCooldownTime(cooldownRemaining)}.`);
+      return;
+    }
+
+    // ── Verify tươi từ Firestore để tránh race condition ──
+    // (Admin có thể vừa khóa đề sau khi học sinh mở modal)
+    if (exam.id) {
+      try {
+        const freshExam = await storageV2.getExamV2(exam.id);
+        if (!freshExam) {
+          alert('❌ Không tìm thấy đề thi này. Vui lòng thử lại.');
+          return;
+        }
+        if (freshExam.isLocked) {
+          alert('🔒 Đề thi vừa bị khóa bởi Quản trị viên! Vui lòng chọn bài thi khác.');
+          return;
+        }
+        if (freshExam.isMaintenance) {
+          alert('🚧 Đề thi vừa chuyển sang chế độ bảo trì! Vui lòng quay lại sau.');
+          return;
+        }
+      } catch (err) {
+        console.warn('[startPractice] Không thể verify exam từ Firestore, tiếp tục với state hiện tại:', err);
+      }
+    }
+
     const sessionId = buildSessionId('practice', subject.name);
     const qCount = exam.questionCount || exam.questions?.length || 10;
     const timeInMinutes = exam.config?.time || Math.max(5, Math.round(qCount * 1.5));
@@ -662,29 +717,69 @@ export default function ClientDashboard() {
               </button>
             </div>
             <CardContent className="p-6 space-y-3 overflow-y-auto max-h-[60vh]">
+              {!isUnlimited && cooldownRemaining > 0 && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 rounded-xl text-xs font-semibold flex items-center gap-2 mb-3 border border-amber-200 dark:border-amber-800">
+                  <Clock className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <span>
+                    Tài khoản đang trong thời gian chờ (10 phút) giữa các lượt làm bài. Thử lại sau{' '}
+                    <strong className="font-mono text-amber-900 dark:text-amber-200 text-sm">{formatCooldownTime(cooldownRemaining)}</strong>
+                  </span>
+                </div>
+              )}
+
               {selectedSubject.exams?.length > 0 ? (
-                selectedSubject.exams.map((ex, idx) => (
-                  <div
-                    key={ex.id}
-                    className="p-4 border border-slate-100 dark:border-slate-800 hover:border-primary/30 dark:hover:border-blue-500/30 rounded-2xl flex items-center justify-between hover:bg-primary/5 dark:hover:bg-blue-950/20 transition group cursor-pointer"
-                    onClick={() => { setShowPracticeModal(false); startPractice(selectedSubject, ex); }}
-                  >
-                    <div>
-                      <div className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-primary dark:group-hover:text-blue-400 transition text-sm">
-                        Bài {idx + 1}: {ex.config?.title || ex.title}
+                selectedSubject.exams.map((ex, idx) => {
+                  const isLocked = !!ex.isLocked;
+                  const isMaintenance = !!ex.isMaintenance;
+                  const isBlocked = isLocked || isMaintenance || (!isUnlimited && cooldownRemaining > 0);
+
+                  return (
+                    <div
+                      key={ex.id}
+                      className={`p-4 border rounded-2xl flex items-center justify-between transition ${
+                        isBlocked
+                          ? 'opacity-70 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                          : 'border-slate-100 dark:border-slate-800 hover:border-primary/30 dark:hover:border-blue-500/30 hover:bg-primary/5 dark:hover:bg-blue-950/20 cursor-pointer group'
+                      }`}
+                      onClick={() => {
+                        if (!isBlocked) {
+                          setShowPracticeModal(false);
+                          startPractice(selectedSubject, ex);
+                        }
+                      }}
+                    >
+                      <div className="flex-1 min-w-0 pr-3">
+                        <div className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-2 flex-wrap">
+                          <span>Bài {idx + 1}: {ex.config?.title || ex.title}</span>
+                          {isLocked && (
+                            <span className="text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 px-2 py-0.5 rounded border border-red-200 dark:border-red-800">
+                              🔒 Đã khóa
+                            </span>
+                          )}
+                          {isMaintenance && (
+                            <span className="text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800">
+                              🚧 Bảo trì
+                            </span>
+                          )}
+                          {!isUnlimited && cooldownRemaining > 0 && !isLocked && !isMaintenance && (
+                            <span className="text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800 font-mono">
+                              ⏱️ Chờ {formatCooldownTime(cooldownRemaining)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex gap-4 text-xs text-slate-400 dark:text-slate-500 mt-1.5 font-medium">
+                          <span className="flex items-center gap-1">
+                            <FileText className="h-3.5 w-3.5" /> {ex.questions?.length ?? ex.questionCount ?? 0} câu hỏi
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3.5 w-3.5" /> ~{ex.config?.time || ex.config?.timeLimit || Math.max(5, Math.round((ex.questions?.length ?? ex.questionCount ?? 0) * 1.5))} phút
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex gap-4 text-xs text-slate-400 dark:text-slate-500 mt-1.5 font-medium">
-                        <span className="flex items-center gap-1">
-                          <FileText className="h-3.5 w-3.5" /> {ex.questions?.length ?? ex.questionCount ?? 0} câu hỏi
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" /> ~{ex.config?.time || ex.config?.timeLimit || Math.max(5, Math.round((ex.questions?.length ?? ex.questionCount ?? 0) * 1.5))} phút
-                        </span>
-                      </div>
+                      <ChevronRight className={`h-5 w-5 ${isBlocked ? 'text-slate-300 dark:text-slate-700' : 'text-slate-400 group-hover:text-primary dark:group-hover:text-blue-400 group-hover:translate-x-1'} transition-all shrink-0`} />
                     </div>
-                    <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-primary dark:group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="text-center text-slate-500 py-8">Chưa có đề luyện tập nào cho môn học này.</div>
               )}

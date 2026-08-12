@@ -24,6 +24,10 @@ export default function QuestionForms({ onAddQuestion }) {
   const [groups, setGroups] = useState([{ name: '', itemsStr: '' }, { name: '', itemsStr: '' }]);
   const [clozeWords, setClozeWords] = useState(['', '']);
   const [orderItems, setOrderItems] = useState(['', '', '']);
+  const [mtfStatements, setMtfStatements] = useState([
+    { text: '', correct: true },
+    { text: '', correct: false },
+  ]);
 
   // Refs cho upload ảnh từng đáp án
   const optionFileRefs = useRef([]);
@@ -138,6 +142,12 @@ export default function QuestionForms({ onAddQuestion }) {
       if (validItems.length < 2) return alert('⚠️ Cần ít nhất 2 mục để sắp xếp! (Mã lỗi: QST-10)');
       newQuestion.items = validItems;
     }
+    else if (currentType === 'multitruefalse') {
+      const validStmts = mtfStatements.filter(s => s.text.trim() !== '');
+      if (validStmts.length < 2) return alert('⚠️ Cần ít nhất 2 phát biểu! (Mã lỗi: QST-12)');
+      if (validStmts.length > 4) return alert('⚠️ Tối đa 4 phát biểu! (Mã lỗi: QST-13)');
+      newQuestion.statements = validStmts.map(s => ({ text: s.text.trim(), correct: s.correct }));
+    }
 
     onAddQuestion(newQuestion);
 
@@ -148,6 +158,7 @@ export default function QuestionForms({ onAddQuestion }) {
     setPairs([{ left: '', right: '' }, { left: '', right: '' }]);
     setGroups([{ name: '', itemsStr: '' }, { name: '', itemsStr: '' }]);
     setClozeWords(['', '']); setOrderItems(['', '', '']);
+    setMtfStatements([{ text: '', correct: true }, { text: '', correct: false }]);
     alert('✅ Đã thêm câu hỏi vào đề!');
   };
 
@@ -362,9 +373,48 @@ export default function QuestionForms({ onAddQuestion }) {
     );
   }
 
+  else if (currentType === 'multitruefalse') {
+    dynamicForm = (
+      <div className="mt-6 pt-6 border-t border-slate-200 animate-in fade-in duration-200">
+        <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">CÁC PHÁT BIỂU (TỐI ĐA 4) — CHỌN ĐÚNG/SAI CHO MỖI PHÁT BIỂU</label>
+        {mtfStatements.map((stmt, i) => (
+          <div key={i} className="flex gap-3 mb-3 items-center">
+            <span className="font-bold text-white bg-teal-500 w-8 h-8 flex items-center justify-center rounded-full flex-shrink-0 shadow-sm">{i + 1}</span>
+            <input
+              type="text"
+              className="flex-1 p-3 border-2 border-slate-200 bg-white rounded-xl outline-none focus:border-teal-500 font-semibold text-slate-700 shadow-sm"
+              placeholder={`Nội dung phát biểu ${i + 1}...`}
+              value={stmt.text}
+              onChange={(e) => { const arr = [...mtfStatements]; arr[i] = { ...arr[i], text: e.target.value }; setMtfStatements(arr); }}
+            />
+            <div className="flex rounded-xl overflow-hidden border-2 border-slate-200 flex-shrink-0">
+              <button
+                onClick={() => { const arr = [...mtfStatements]; arr[i] = { ...arr[i], correct: true }; setMtfStatements(arr); }}
+                className={`px-4 py-2 font-bold text-sm transition ${stmt.correct ? 'bg-emerald-500 text-white' : 'bg-white text-slate-500 hover:bg-emerald-50'}`}
+              >Đúng</button>
+              <button
+                onClick={() => { const arr = [...mtfStatements]; arr[i] = { ...arr[i], correct: false }; setMtfStatements(arr); }}
+                className={`px-4 py-2 font-bold text-sm transition ${!stmt.correct ? 'bg-red-500 text-white' : 'bg-white text-slate-500 hover:bg-red-50'}`}
+              >Sai</button>
+            </div>
+            {mtfStatements.length > 2 && (
+              <Button variant="outline" onClick={() => { const arr = [...mtfStatements]; arr.splice(i, 1); setMtfStatements(arr); }}
+                className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-3 h-auto border-transparent hover:border-red-200 rounded-xl flex-shrink-0"><Trash2 className="h-5 w-5" /></Button>
+            )}
+          </div>
+        ))}
+        {mtfStatements.length < 4 && (
+          <Button variant="outline" onClick={() => setMtfStatements([...mtfStatements, { text: '', correct: true }])}
+            className="text-teal-600 border-teal-200 hover:bg-teal-50 font-bold mt-2 gap-2"><Plus className="h-4 w-4" /> Thêm phát biểu</Button>
+        )}
+      </div>
+    );
+  }
+
   const tabs = [
     { id: 'single', label: 'Trắc nghiệm' }, { id: 'multiselect', label: 'Nhiều đáp án' },
     { id: 'fill', label: 'Điền từ' }, { id: 'truefalse', label: 'Đúng / Sai' },
+    { id: 'multitruefalse', label: 'Đúng/Sai Nhiều Phát Biểu' },
     { id: 'drag', label: 'Ghép cặp 1-1' }, { id: 'groupdrag', label: 'Phân loại Nhóm' },
     { id: 'clozedrag', label: 'Kéo vào Đoạn văn' }, { id: 'order', label: 'Sắp xếp' }
   ];

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import ExamCard from './ExamCard';
 import RandomExamModal from './RandomExamModal';
-import { ArrowLeft, Check, Dices, Download, Folder, Plus, Pencil } from 'lucide-react';
+import { ArrowLeft, Check, Dices, Download, Folder, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { storageV2 } from '../../utils/storageV2';
 
@@ -41,6 +41,35 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
       }
     } else {
       onOpenEditor(examId);
+    }
+  };
+
+  // Hàm khóa / mở khóa đề thi
+  const handleToggleLock = async (examId, currentIsLocked) => {
+    await storageV2.toggleExamLockV2(examId, currentIsLocked);
+  };
+
+  // Hàm bật / tắt bảo trì đề thi
+  const handleToggleMaintenance = async (examId, currentIsMaintenance) => {
+    await storageV2.toggleExamMaintenanceV2(examId, currentIsMaintenance);
+  };
+
+  // Hàm dọn dẹp ghost documents (đề thi bị xóa nhưng còn "xác" trong Firestore)
+  const handleCleanupGhostDocs = async () => {
+    if (!confirm('Quét và xóa các ghost document (đề thi đã xóa còn sót lại trong database)?\nThao tác này không thể hoàn tác!')) return;
+    try {
+      // Load TẤT CẢ exams (không lọc theo môn) để tìm orphan
+      const all = await storageV2.loadExamsV2();
+      const ghosts = all.filter(e => !e.subjectId || !e.title);
+      if (ghosts.length === 0) { alert('✅ Database sạch, không có ghost document nào!'); return; }
+      let deleted = 0;
+      for (const g of ghosts) {
+        await storageV2.deleteExamV2(g.id);
+        deleted++;
+      }
+      alert(`✅ Đã xóa ${deleted} ghost document thành công!`);
+    } catch (e) {
+      alert('❌ Lỗi khi dọn dẹp: ' + e.message);
     }
   };
 
@@ -234,6 +263,13 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
             >
               <Plus className="h-4 w-4" /> SOẠN ĐỀ THI MỚI
             </Button>
+            <button
+              onClick={handleCleanupGhostDocs}
+              className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold py-2.5 px-3 rounded-xl transition text-xs flex items-center gap-1.5 cursor-pointer"
+              title="Xóa các ghost document (bài thi đã xóa còn sót trong DB)"
+            >
+              <Trash2 className="h-4 w-4" /> Dọn DB
+            </button>
           </div>
         )}
       </div>
@@ -254,6 +290,8 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
                 onDelete={handleDeleteExam}
                 onEdit={handleEditExam}
                 onPlay={onPlayExam}
+                onToggleLock={handleToggleLock}
+                onToggleMaintenance={handleToggleMaintenance}
               />
             ))}
           </div>

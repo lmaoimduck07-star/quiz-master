@@ -44,27 +44,44 @@ export default function QuestionList({ questions, onUpdateQuestion, onDeleteQues
         }
         else if (q.type === 'drag') {
           typeBadge = "Ghép cặp 1-1";
-          detailsHtml = <div className="bg-slate-50 border-2 border-slate-200 p-5 rounded-xl mt-4 flex flex-col gap-3">{q.pairs.map((p, pIdx) => (<div key={pIdx} className="flex gap-3 text-sm"><div className="flex-1 bg-white p-3 border border-slate-300 rounded-lg font-semibold text-slate-700">{p.left}</div><div className="flex-1 bg-emerald-50 border-2 border-emerald-300 text-emerald-800 p-3 rounded-lg font-bold flex items-center justify-center">{p.right}</div></div>))}</div>;
+          detailsHtml = <div className="bg-slate-50 border-2 border-slate-200 p-5 rounded-xl mt-4 flex flex-col gap-3">{(q.pairs || []).map((p, pIdx) => (<div key={pIdx} className="flex gap-3 text-sm"><div className="flex-1 bg-white p-3 border border-slate-300 rounded-lg font-semibold text-slate-700">{p.left}</div><div className="flex-1 bg-emerald-50 border-2 border-emerald-300 text-emerald-800 p-3 rounded-lg font-bold flex items-center justify-center">{p.right}</div></div>))}</div>;
         }
         else if (q.type === 'groupdrag') {
           typeBadge = "Phân loại Nhóm";
-          const gridColsClass = q.groups.length === 2 ? 'grid-cols-2' : (q.groups.length === 3 ? 'grid-cols-3' : 'grid-cols-2 lg:grid-cols-4');
-          detailsHtml = <div className={`grid ${gridColsClass} gap-6 mt-6 w-full`}>{q.groups.map((g, gIdx) => (<div key={gIdx} className="bg-slate-50 border-2 border-slate-200 p-6 rounded-2xl flex flex-col items-center justify-start h-full"><strong className="text-indigo-800 block mb-5 border-b-2 border-indigo-200 pb-3 text-center text-lg w-full">{g.name}</strong><div className="flex flex-wrap justify-center content-start gap-3 w-full">{g.items.map((item, itemIdx) => <span key={itemIdx} className="bg-indigo-100 border border-indigo-300 text-indigo-800 px-4 py-2 rounded-xl text-sm font-bold text-center">{item}</span>)}</div></div>))}</div>;
+          const gridColsClass = (q.groups||[]).length === 2 ? 'grid-cols-2' : ((q.groups||[]).length === 3 ? 'grid-cols-3' : 'grid-cols-2 lg:grid-cols-4');
+          detailsHtml = <div className={`grid ${gridColsClass} gap-6 mt-6 w-full`}>{(q.groups||[]).map((g, gIdx) => (<div key={gIdx} className="bg-slate-50 border-2 border-slate-200 p-6 rounded-2xl flex flex-col items-center justify-start h-full"><strong className="text-indigo-800 block mb-5 border-b-2 border-indigo-200 pb-3 text-center text-lg w-full">{g.name}</strong><div className="flex flex-wrap justify-center content-start gap-3 w-full">{(g.items||[]).map((item, itemIdx) => <span key={itemIdx} className="bg-indigo-100 border border-indigo-300 text-indigo-800 px-4 py-2 rounded-xl text-sm font-bold text-center">{item}</span>)}</div></div>))}</div>;
         }
         else if (q.type === 'clozedrag') {
           typeBadge = "Kéo thả Đoạn văn";
-          let previewText = q.question; q.answers.forEach(ans => { previewText = previewText.replace("___", `<b style="color:#166534; background:#dcfce7; padding:2px 8px; border-radius:6px; border:2px dashed #22c55e;">${ans}</b>`); });
+          let previewText = q.question; (q.answers||[]).forEach(ans => { previewText = previewText.replace("___", `<b style="color:#166534; background:#dcfce7; padding:2px 8px; border-radius:6px; border:2px dashed #22c55e;">${ans}</b>`); });
           detailsHtml = <div className="bg-white border-2 border-slate-200 p-6 rounded-xl mt-4 text-slate-800 leading-loose italic text-lg" dangerouslySetInnerHTML={{ __html: previewText }} />;
         }
-        // XEM TRƯỚC SẮP XẾP
         else if (q.type === 'order') {
           typeBadge = "Sắp xếp";
           detailsHtml = (
             <div className="bg-slate-50 border-2 border-slate-200 p-5 rounded-xl mt-4 flex flex-col gap-2">
               <span className="text-slate-500 font-semibold mb-2 block">Thứ tự đúng:</span>
-              {q.items.map((item, idx) => (
+              {(q.items||[]).map((item, idx) => (
                 <div key={idx} className="bg-white border border-slate-300 p-3 rounded-lg font-bold text-slate-700 flex items-center gap-3">
                   <span className="text-indigo-400 font-black">{idx + 1}.</span> {item}
+                </div>
+              ))}
+            </div>
+          );
+        }
+        else if (q.type === 'multitruefalse') {
+          typeBadge = "Đúng/Sai Nhiều Phát Biểu";
+          detailsHtml = (
+            <div className="flex flex-col gap-3 mt-4">
+              {(q.statements || []).map((stmt, idx) => (
+                <div key={idx} className="flex items-center gap-3 bg-slate-50 border-2 border-slate-200 rounded-xl p-4">
+                  <span className="font-bold text-white w-7 h-7 flex-shrink-0 rounded-full flex items-center justify-center text-xs bg-teal-500">{idx + 1}</span>
+                  <span className="flex-1 text-slate-700 font-semibold text-sm">{stmt.text}</span>
+                  <span className={`px-4 py-1.5 rounded-lg font-black text-sm flex-shrink-0 ${
+                    stmt.correct ? 'bg-emerald-100 text-emerald-700 border-2 border-emerald-300' : 'bg-red-100 text-red-700 border-2 border-red-300'
+                  }`}>
+                    {stmt.correct ? 'Đúng' : 'Sai'}
+                  </span>
                 </div>
               ))}
             </div>

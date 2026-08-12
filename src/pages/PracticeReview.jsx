@@ -319,7 +319,36 @@ export default function PracticeReview() {
                           );
                         }
 
+                        if (qType === 'multitruefalse') {
+                          const stmts = q.statements || [];
+                          const userMap = q.userAnswer || {};
+                          return (
+                            <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl space-y-3">
+                              {stmts.map((stmt, idx) => {
+                                const userAns = userMap[idx];
+                                const isStmtCorrect = userAns === stmt.correct;
+                                return (
+                                  <div key={idx} className={`flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-white dark:bg-slate-900 p-3 border-2 rounded-xl ${isStmtCorrect ? 'border-emerald-200 dark:border-emerald-900' : 'border-red-200 dark:border-red-900'}`}>
+                                    <div className="flex-1 text-slate-700 dark:text-slate-300 font-medium text-sm">{stmt.text}</div>
+                                    <div className="flex gap-2 shrink-0 items-center">
+                                      <span className={`px-3 py-1 rounded-lg text-xs font-bold ${userAns === undefined ? 'bg-slate-100 dark:bg-slate-800 text-slate-400' : userAns ? 'bg-emerald-100 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300' : 'bg-red-100 dark:bg-red-950/30 text-red-800 dark:text-red-300'}`}>
+                                        {userAns === undefined ? '(Chưa chọn)' : userAns ? 'Đúng' : 'Sai'}
+                                      </span>
+                                      {!isStmtCorrect && (
+                                        <span className="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-100 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300">
+                                          ✓ {stmt.correct ? 'Đúng' : 'Sai'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        }
+
                         return null;
+
                       })()}
                     </div>
                   </div>

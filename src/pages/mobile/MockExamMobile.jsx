@@ -22,6 +22,7 @@ import {
   Send, MessageSquare
 } from 'lucide-react';
 import { storageV2 } from '../../utils/storageV2';
+import { setPracticeCooldown, isUserUnlimited } from '../../utils/cooldownManager';
 
 // ── Helpers (copy từ MockExam.jsx) ──────────────────────────────────────────
 
@@ -690,7 +691,7 @@ function ErrorScreen({ icon: Icon, title, subtitle, color = 'amber', onBack }) {
 }
 
 /** Màn hình bắt đầu thi */
-function StartScreen({ title, questions, timeLimit, mode, onStart }) {
+function StartScreen({ title, questions, timeLimit, mode, onStart, startingExam = false }) {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white flex flex-col items-center justify-center p-6 transition-colors">
       <div className="w-16 h-16 rounded-2xl bg-indigo-100 dark:bg-indigo-900/50 border border-indigo-300 dark:border-indigo-500/40 flex items-center justify-center mb-5 shadow-sm">
@@ -720,11 +721,12 @@ function StartScreen({ title, questions, timeLimit, mode, onStart }) {
       )}
       <button
         onClick={onStart}
-        className="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-base font-black
+        disabled={startingExam}
+        className="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-wait text-white text-base font-black
                    shadow-lg shadow-indigo-600/30 dark:shadow-indigo-900/50 active:scale-95 transition-all"
         style={{ minHeight: 56 }}
       >
-        Bắt Đầu Làm Bài
+        {startingExam ? '🔄 Đang kiểm tra...' : 'Bắt Đầu Làm Bài'}
       </button>
     </div>
   );
@@ -896,6 +898,7 @@ export default function MockExamMobile() {
   const [warningText, setWarningText] = useState('');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [showGridSheet, setShowGridSheet] = useState(false);
+  const [startingExam, setStartingExam] = useState(false); // loading khi verify trước khi bắt đầu
   const [isBlockedByDupTab, setIsBlockedByDupTab] = useState(false);
   const [isTerminatedByAdmin, setIsTerminatedByAdmin] = useState(false);
   const [isDeletedByAdmin, setIsDeletedByAdmin] = useState(false);
@@ -1160,7 +1163,18 @@ export default function MockExamMobile() {
         const uOrder = userAnswer || items.map((_, i) => i);
         isCorrect = JSON.stringify(uOrder) === JSON.stringify(correctOrder);
       }
-      if (isCorrect) correctCount++;
+      else if (qType === 'multitruefalse') {
+        correctAnswer = q.statements || [];
+        const stmts = q.statements || [];
+        if (stmts.length > 0) {
+          const userMap = userAnswer || {};
+          const correctCount2 = stmts.filter((s, idx) => userMap[idx] === s.correct).length;
+          const ratio = correctCount2 / stmts.length;
+          correctCount += ratio;
+          isCorrect = ratio === 1;
+        }
+      }
+      if (qType !== 'multitruefalse' && isCorrect) correctCount++;
       return {
         id: q.id,
         type: qType,
@@ -1172,7 +1186,8 @@ export default function MockExamMobile() {
         pairs: q.pairs,
         groups: q.groups,
         answers: q.answers,
-        items: q.items
+        items: q.items,
+        statements: q.statements,
       };
     });
     const score = parseFloat(((correctCount / questions.length) * 10).toFixed(1));
@@ -1182,6 +1197,9 @@ export default function MockExamMobile() {
     results.unshift(newResult);
     localStorage.setItem('qm_exam_results', JSON.stringify(results));
     storage.saveExamResult(newResult);
+    if ((mode || 'practice') === 'practice' && !isUserUnlimited(currentUser)) {
+      setPracticeCooldown(currentUser?.id);
+    }
     localStorage.removeItem('qm_active_session');
     markSessionAsExpired(examSessionCode);
     await storage.removeActiveSession(examSessionCode);
@@ -1263,7 +1281,36 @@ export default function MockExamMobile() {
         questions={questions}
         timeLimit={timeLimit}
         mode={mode}
-        onStart={() => setScreen('quiz')}
+        startingExam={startingExam}
+        onStart={async () => {
+          // ── Verify tươi từ Firestore trước khi vào thi ──
+          if (examId) {
+            setStartingExam(true);
+            try {
+              const freshExam = await storageV2.getExamV2(examId);
+              if (!freshExam) {
+                alert('❌ Không tìm thấy đề thi này. Vui lòng quay lại trang chủ.');
+                navigate('/client/dashboard');
+                return;
+              }
+              if (freshExam.isLocked) {
+                alert('🔒 Đề thi này đã bị Quản trị viên khóa! Vui lòng chọn bài thi khác.');
+                navigate('/client/dashboard');
+                return;
+              }
+              if (freshExam.isMaintenance) {
+                alert('🚧 Đề thi đang trong quá trình bảo trì! Vui lòng quay lại sau.');
+                navigate('/client/dashboard');
+                return;
+              }
+            } catch (err) {
+              console.warn('[MockExamMobile] Không thể verify exam từ Firestore:', err);
+            } finally {
+              setStartingExam(false);
+            }
+          }
+          setScreen('quiz');
+        }}
       />
     );
   }
@@ -1566,8 +1613,36 @@ export default function MockExamMobile() {
             />
           )}
 
+          {/* ── MultiTrueFalse (đúng/sai nhiều phát biểu) ── */}
+          {currentQ?.type === 'multitruefalse' && (
+            <div className="flex flex-col gap-3">
+              {(currentQ.statements || []).map((stmt, idx) => {
+                const userMap = answers[currentQuestion] || {};
+                return (
+                  <div key={idx} className="flex flex-col gap-2 p-3 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{stmt.text}</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleAnswer(currentQuestion, { ...(answers[currentQuestion] || {}), [idx]: true })}
+                        className={`flex-1 py-2 rounded-xl font-bold text-sm border-2 transition ${
+                          userMap[idx] === true ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+                        }`}
+                      >Đúng</button>
+                      <button
+                        onClick={() => handleAnswer(currentQuestion, { ...(answers[currentQuestion] || {}), [idx]: false })}
+                        className={`flex-1 py-2 rounded-xl font-bold text-sm border-2 transition ${
+                          userMap[idx] === false ? 'bg-red-500 text-white border-red-500' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+                        }`}
+                      >Sai</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {/* ── Fallback (các loại thực sự chưa hỗ trợ) ── */}
-          {currentQ?.type && !['single', 'multiselect', 'truefalse', 'fill', 'order', 'drag', 'groupdrag', 'clozedrag'].includes(currentQ.type) && (
+          {currentQ?.type && !['single', 'multiselect', 'truefalse', 'fill', 'order', 'drag', 'groupdrag', 'clozedrag', 'multitruefalse'].includes(currentQ.type) && (
             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-2xl p-4 text-sm text-amber-700 dark:text-amber-300 text-center">
               Loại câu hỏi này ({currentQ.type}) hiển thị tốt nhất trên Desktop.
             </div>

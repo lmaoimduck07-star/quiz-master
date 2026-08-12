@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { storage } from '../utils/storage';
 import { storageV2 } from '../utils/storageV2';
+import {
+  isUserUnlimited,
+  getRemainingCooldownSeconds,
+  formatCooldownTime,
+} from '../utils/cooldownManager';
 
 // 🔧 Chế độ bảo trì cổng lập trình
 const CODING_MAINTENANCE = false;
@@ -20,6 +25,26 @@ export function useClientDashboardLogic() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedSubject, setSelectedSubject] = useState(null);
   const [showPracticeModal, setShowPracticeModal] = useState(false);
+
+  // Cooldown 10 phút luyện tập theo tài khoản
+  const isUnlimited = isUserUnlimited(currentUser);
+  const [cooldownRemaining, setCooldownRemaining] = useState(() =>
+    currentUser?.id ? getRemainingCooldownSeconds(currentUser.id) : 0
+  );
+
+  useEffect(() => {
+    if (!currentUser?.id || isUnlimited) {
+      setCooldownRemaining(0);
+      return;
+    }
+    const updateCd = () => {
+      const rem = getRemainingCooldownSeconds(currentUser.id);
+      setCooldownRemaining(rem);
+    };
+    updateCd();
+    const interval = setInterval(updateCd, 1000);
+    return () => clearInterval(interval);
+  }, [currentUser?.id, isUnlimited]);
 
   // Simulation states
   const [showExamSelectModal, setShowExamSelectModal] = useState(false);
@@ -39,14 +64,15 @@ export function useClientDashboardLogic() {
   const [isLoadingResults, setIsLoadingResults] = useState(true);
   const [resultsFilter, setResultsFilter] = useState('all');
 
-  // Load subjects từ Firestore
+  // Subscribe realtime subjects + exams (bao gồm isLocked, isMaintenance)
   useEffect(() => {
     localStorage.removeItem('qm_active_session');
     setIsLoading(true);
-    storage.loadSubjects()
-      .then(data => setSubjects(data.filter(s => s.isActive !== false)))
-      .catch(err => console.error('Error loading subjects:', err))
-      .finally(() => setIsLoading(false));
+    const unsub = storageV2.subscribeSubjectsWithExams((data) => {
+      setSubjects(data.filter(s => s.isActive !== false));
+      setIsLoading(false);
+    });
+    return () => { if (typeof unsub === 'function') unsub(); };
   }, []);
 
   // Load exam results real-time từ Firestore
@@ -123,6 +149,42 @@ export function useClientDashboardLogic() {
   };
 
   const startPractice = async (subject, exam) => {
+    // Kiểm tra nhanh từ state local trước
+    if (exam.isLocked) {
+      alert('🔒 Đề thi này đã bị Quản trị viên khóa! Vui lòng chọn bài thi khác.');
+      return;
+    }
+    if (exam.isMaintenance) {
+      alert('🚧 Đề thi này đang trong quá trình bảo trì! Vui lòng quay lại sau.');
+      return;
+    }
+    if (!isUnlimited && cooldownRemaining > 0) {
+      alert(`⏱️ Tài khoản đang trong thời gian chờ (10 phút) giữa các lượt luyện tập!\nVui lòng thử lại sau ${formatCooldownTime(cooldownRemaining)}.`);
+      return;
+    }
+
+    // ── Verify tươi từ Firestore để tránh race condition ──
+    // (Admin có thể vừa khóa đề sau khi học sinh mở modal)
+    if (exam.id) {
+      try {
+        const freshExam = await storageV2.getExamV2(exam.id);
+        if (!freshExam) {
+          alert('❌ Không tìm thấy đề thi này. Vui lòng thử lại.');
+          return;
+        }
+        if (freshExam.isLocked) {
+          alert('🔒 Đề thi vừa bị khóa bởi Quản trị viên! Vui lòng chọn bài thi khác.');
+          return;
+        }
+        if (freshExam.isMaintenance) {
+          alert('🚧 Đề thi vừa chuyển sang chế độ bảo trì! Vui lòng quay lại sau.');
+          return;
+        }
+      } catch (err) {
+        console.warn('[startPractice] Không thể verify exam từ Firestore, tiếp tục với state hiện tại:', err);
+      }
+    }
+
     let qList = exam.questions || [];
     if ((!qList || qList.length === 0) && exam.id) {
       try {
@@ -263,6 +325,9 @@ export function useClientDashboardLogic() {
     isEnteringCoding, codingStep,
     examResults, filteredResults, isLoadingResults,
     resultsFilter, setResultsFilter,
+    // Cooldown & Permissions
+    isUnlimited, cooldownRemaining,
+    cooldownFormatted: formatCooldownTime(cooldownRemaining),
     // Computed
     totalAttempts, avgScore, passRate,
     // Auth

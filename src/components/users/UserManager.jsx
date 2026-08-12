@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Plus, UserCog, UserCheck, UserX, Pencil, Lock, Unlock, Trash2, ChevronDown, Terminal, ShieldAlert } from 'lucide-react';
+import { Search, Plus, UserCog, UserCheck, UserX, Pencil, Lock, Unlock, Trash2, ChevronDown, Terminal, ShieldAlert, Zap } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Card, CardHeader, CardContent } from '../ui/Card';
@@ -17,18 +17,37 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
   const [permConfirm, setPermConfirm] = useState(null); // { user, newValue, code }
   const [permEnteredCode, setPermEnteredCode] = useState('');
 
+  // permConfirm bây giờ lưu thêm field `type`: 'coding' | 'unlimited'
+  const [permType, setPermType] = useState('coding');
+
   const handleTogglePermission = (user, newValue) => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setPermType('coding');
+    setPermConfirm({ user, newValue, code });
+    setPermEnteredCode('');
+  };
+
+  const handleToggleUnlimited = (user, newValue) => {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setPermType('unlimited');
     setPermConfirm({ user, newValue, code });
     setPermEnteredCode('');
   };
 
   const confirmPermissionChange = () => {
     if (!permConfirm || permEnteredCode !== permConfirm.code) return;
-    const updated = {
-      ...permConfirm.user,
-      permissions: { ...(permConfirm.user.permissions || {}), codingAccess: permConfirm.newValue }
-    };
+    let updated;
+    if (permType === 'unlimited') {
+      updated = {
+        ...permConfirm.user,
+        isUnlimited: permConfirm.newValue,
+      };
+    } else {
+      updated = {
+        ...permConfirm.user,
+        permissions: { ...(permConfirm.user.permissions || {}), codingAccess: permConfirm.newValue }
+      };
+    }
     onUpdateUser(updated);
     setPermConfirm(null);
     setPermEnteredCode('');
@@ -165,18 +184,34 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <label className={`inline-flex items-center gap-2 select-none ${(user.roles || []).includes('Admin') ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
-                          <input
-                            type="checkbox"
-                            checked={user.permissions?.codingAccess || (user.roles || []).includes('Admin') || false}
-                            disabled={(user.roles || []).includes('Admin')}
-                            onChange={(e) => handleTogglePermission(user, e.target.checked)}
-                            className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
-                          />
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                            <Terminal className="h-3 w-3 text-blue-500" /> Coding & Vấn đáp
-                          </span>
-                        </label>
+                        <div className="flex flex-col gap-1.5">
+                          {/* Coding & Vấn đáp */}
+                          <label className={`inline-flex items-center gap-2 select-none ${(user.roles || []).includes('Admin') ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                            <input
+                              type="checkbox"
+                              checked={user.permissions?.codingAccess || (user.roles || []).includes('Admin') || false}
+                              disabled={(user.roles || []).includes('Admin')}
+                              onChange={(e) => handleTogglePermission(user, e.target.checked)}
+                              className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                            />
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                              <Terminal className="h-3 w-3 text-blue-500" /> Coding & Vấn đáp
+                            </span>
+                          </label>
+                          {/* Unlimited — không áp dụng cho Admin (đã mặc định Unlimited) */}
+                          <label className={`inline-flex items-center gap-2 select-none ${(user.roles || []).includes('Admin') ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                            <input
+                              type="checkbox"
+                              checked={user.isUnlimited === true || (user.roles || []).includes('Admin')}
+                              disabled={(user.roles || []).includes('Admin')}
+                              onChange={(e) => handleToggleUnlimited(user, e.target.checked)}
+                              className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-amber-500 focus:ring-amber-500 focus:ring-offset-0 cursor-pointer"
+                            />
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                              <Zap className="h-3 w-3" /> Unlimited (10p)
+                            </span>
+                          </label>
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         {user.status === 'Active' ? (
@@ -278,9 +313,13 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
 
             <div className="p-8 space-y-5">
               <div className={`p-4 rounded-2xl text-sm font-semibold leading-relaxed border ${permConfirm.newValue ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/40 text-blue-800 dark:text-blue-300' : 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-300'}`}>
-                {permConfirm.newValue
-                  ? <>🔓 Bạn đang <strong>CẤP QUYỀN</strong> Thi Lập trình &amp; Vấn đáp AI cho tài khoản <strong>{permConfirm.user.fullName}</strong> ({permConfirm.user.username}).</>
-                  : <>🔒 Bạn đang <strong>THU HỒI QUYỀN</strong> Thi Lập trình &amp; Vấn đáp AI của tài khoản <strong>{permConfirm.user.fullName}</strong> ({permConfirm.user.username}).</>
+                {permType === 'unlimited'
+                  ? permConfirm.newValue
+                    ? <>⚡ Bạn đang <strong>CẤP QUYỀN Unlimited</strong> (không giới hạn 10p luyện tập) cho tài khoản <strong>{permConfirm.user.fullName}</strong> ({permConfirm.user.username}).</>
+                    : <>🔒 Bạn đang <strong>THU HỒI QUYỀN Unlimited</strong> của tài khoản <strong>{permConfirm.user.fullName}</strong> ({permConfirm.user.username}). Tài khoản này sẽ bị áp dụng lại 10p cooldown.</>
+                  : permConfirm.newValue
+                    ? <>🔓 Bạn đang <strong>CẤP QUYỀN</strong> Thi Lập trình &amp; Vấn đáp AI cho tài khoản <strong>{permConfirm.user.fullName}</strong> ({permConfirm.user.username}).</>
+                    : <>🔒 Bạn đang <strong>THU HỒI QUYỀN</strong> Thi Lập trình &amp; Vấn đáp AI của tài khoản <strong>{permConfirm.user.fullName}</strong> ({permConfirm.user.username}).</>
                 }
               </div>
 
