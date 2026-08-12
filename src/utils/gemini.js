@@ -17,9 +17,8 @@ export const saveGeminiApiKey = (key) => {
 
 const CANDIDATE_MODELS = [
   'gemini-3.5-flash',
-  'gemini-flash-lite-latest',
-  'gemini-2.0-flash-lite',
-  'gemini-2.0-flash',
+  'gemini-2.5-flash',
+  'gemini-flash-latest'
 ];
 
 const callGemini = async (prompt, systemInstruction = '', jsonMode = false, options = {}) => {
@@ -105,8 +104,8 @@ const callGeminiWithImages = async (prompt, images = [], systemInstruction = '',
   const apiKey = getApiKey();
   if (!apiKey) throw new Error('Chưa cấu hình API Key Gemini. (Mã lỗi: SYS-02)');
 
-  // Chỉ model Vision hỗ trợ multimodal (gemini-2.0-flash đã bị deprecated)
-  const visionModels = ['gemini-3.5-flash', 'gemini-2.0-flash-exp', 'gemini-1.5-flash'];
+  // Chỉ model Vision hỗ trợ multimodal
+  const visionModels = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-flash-latest'];
 
   // Build parts: ảnh trước, text sau cùng
   const parts = [
@@ -420,16 +419,53 @@ Cuấu trúc JSON:
 Nhận dạng: Bảng 2 cột, MỘI HÀNG là 1 cặp riêng biệt — vế TRÁI ghép với vế PHẢI của CÙNG HÀNG đó.
 Mỗi item vế trái chỉ tương ứng đúng 1 item vế phải (quan hệ 1-1).
 Ví dụ trong file Word:
-... (cấu trúc cũ)
-
---- DẠNG 6: GROUPDRAG (Phân loại nhóm) ---
-... (cấu trúc cũ)
-
---- DẠNG 7: CLOZEDRAG (Kéo vào đoạn văn) ---
-  "answers": ["Đáp 1", "Đáp 2"],
+  | LẦN MƯỢN    | Thực thể trung gian |
+  | SỐ ĐT       | Thuộc tính đa trị   |
+  | MÃ ĐG       | Khóa chính          |
+  | HẠN_TRẢ     | Thuộc tính liên kết |
+→ Đây là DRAG vì mỗi hàng = 1 cặp riêng lẻ (LẦN MƯỢN ghép với Thực thể trung gian, v.v.)
+Cấu trúc JSON:
+{
+  "type": "drag",
+  "question": "Kéo thả đúng các thành phần vào loại tương ứng",
+  "pairs": [
+    { "left": "LẦN MƯỢN",    "right": "Thực thể trung gian" },
+    { "left": "SỐ ĐIỆN THOẠI","right": "Thuộc tính đa trị" },
+    { "left": "MÃ ĐG",        "right": "Khóa chính" },
+    { "left": "HẠN_TRẢ",      "right": "Thuộc tính của liên kết" }
+  ],
   "points": 1
 }
 
+--- DẠNG 6: GROUPDRAG (Phân loại nhóm) ---
+Nhận dạng: Yêu cầu kéo/phân loại các từ/mục vào 2 hoặc nhiều NHÓM/CỘT.
+Ví dụ: "Phân loại các thiết bị sau vào Input/Output: Chuột, Bàn phím, Màn hình, Loa"
+Cấu trúc JSON:
+{
+  "type": "groupdrag",
+  "question": "Phân loại thiết bị Input và Output",
+  "groups": [
+    {
+      "groupName": "Input",
+      "items": ["Chuột", "Bàn phím"]
+    },
+    {
+      "groupName": "Output",
+      "items": ["Màn hình", "Loa"]
+    }
+  ],
+  "points": 1
+}
+
+--- DẠNG 7: CLOZEDRAG (Kéo vào đoạn văn) ---
+Nhận dạng: Có 1 đoạn văn chứa nhiều chỗ trống (VD: "Mặt trời mọc ở hướng [1] và lặn ở hướng [2]") và 1 danh sách các từ để kéo vào chỗ trống.
+Cấu trúc JSON:
+{
+  "type": "clozedrag",
+  "question": "Mặt trời mọc ở hướng [1] và lặn ở hướng [2]",
+  "answers": ["Đông", "Tây"],
+  "points": 1
+}
 --- DẠNG 8: ORDER (Sắp xếp thứ tự) ---
 Nhận dạng: Yêu cầu sắp xếp các bước/mục theo thứ tự đúng.
 Cuấu trúc JSON:
@@ -692,6 +728,8 @@ QUY TẮc CHUNG:
       parseAIJsonArray(responseText).forEach(q => allQuestions.push(normalizeQuestion(q, imageSequence, localMap)));
     } catch (err) {
       console.error(`[parseWordContentWithAI] Chunk ${i + 1} lỗi:`, err);
+      // Ném lỗi ra để UI catch và báo cho user (thay vì nuốt lỗi và import 0 câu)
+      throw err;
     }
   }
   if (onProgress) onProgress(chunks.length, chunks.length);
