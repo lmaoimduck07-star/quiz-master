@@ -3,54 +3,144 @@ import JSZip from 'jszip';
 import { parseWordContentWithAI, parseExamFromImagesWithAI } from './gemini.js';
 
 // ─────────────────────────────────────────────────────────────
-// OOXML COLOR EXTRACTION — đọc trực tiếp XML trong .docx
-// để phát hiện đáp án đúng được đánh dấu bằng màu đỏ (EE0000)
+// OOXML SEMANTIC STYLE EXTRACTOR
+// Đọc raw XML trong .docx để phát hiện đáp án đúng/sai được đánh dấu
+// bằng màu sắc (Đỏ, Xanh) hoặc highlight.
 // ─────────────────────────────────────────────────────────────
-const RED_COLORS = new Set(['ee0000', 'ff0000', 'red']);
+const RED_COLORS   = new Set(['ee0000', 'ff0000', 'c00000', 'c9211e', 'red']);
+const BLUE_COLORS  = new Set(['00b0f0', '0070c0', '00b050', '70ad47', '4472c4']);
+const HL_CORRECT   = new Set(['yellow', 'green', 'cyan']);
 
 /**
- * Đọc raw XML từ ArrayBuffer của file .docx, trả về Set<string>
- * chứa các đoạn text (đã normalize) có font color = đỏ.
+ * Trích xuất màu sắc và highlight từ raw OOXML document.xml
+ * @returns {Promise<{ answerMap: Map<string, string>, redSet: Set<string>, blueSet: Set<string>, hlSet: Set<string> }>}
  */
-async function extractRedTextSet(arrayBuffer) {
-  const redSet = new Set();
+async function extractAnswerStyles(arrayBuffer) {
+  const answerMap = new Map();
+  const redSet  = new Set();
+  const blueSet = new LogicSet ? new Set() : new Set();
+  const hlSet   = new Set();
+
   try {
     const zip = await JSZip.loadAsync(arrayBuffer);
     const docFile = zip.file('word/document.xml');
-    if (!docFile) return redSet;
+    if (!docFile) return { answerMap, redSet, blueSet, hlSet };
     const docXml = await docFile.async('string');
 
-    // Tách từng paragraph <w:p>...</w:p>
-    const paragraphs = docXml.match(/<w:p[\s>].*?<\/w:p>/gs) || [];
+    const paragraphs = docXml.match(/<w:p[\s>][\s\S]*?<\/w:p>/g) || [];
     for (const para of paragraphs) {
-      // Lấy text thuần từ paragraph
-      const runs = para.match(/<w:r[\s>].*?<\/w:r>/gs) || [];
+      const runs = para.match(/<w:r[\s>][\s\S]*?<\/w:r>/g) || [];
       let fullText = '';
-      let hasRed = false;
-      let hasNonRedText = false;
+      let hasRed = false, hasBlue = false;
+      let hlVal = null;
+
       for (const run of runs) {
-        const runText = (run.match(/<w:t[^>]*>(.*?)<\/w:t>/gs) || [])
+        const runText = (run.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [])
           .map(t => t.replace(/<[^>]+>/g, '')).join('');
         if (!runText) continue;
         fullText += runText;
-        // Kiểm tra color trong run properties
+
         const colorMatch = run.match(/w:color\s+w:val="([^"]+)"/i);
         const color = colorMatch ? colorMatch[1].toLowerCase() : null;
-        if (color && RED_COLORS.has(color)) {
-          hasRed = true;
-        } else if (runText.trim()) {
-          hasNonRedText = true;
-        }
+        if (color && RED_COLORS.has(color))  hasRed  = true;
+        if (color && BLUE_COLORS.has(color)) hasBlue = true;
+
+        const hlMatch = run.match(/w:highlight\s+w:val="([^"]+)"/i);
+        if (hlMatch && HL_CORRECT.has(hlMatch[1].toLowerCase())) hlVal = hlMatch[1].toLowerCase();
       }
-      // Chỉ đánh dấu red nếu phần lớn text là đỏ (cho phép 1-2 ký tự label)
-      if (hasRed && fullText.trim()) {
-        redSet.add(normalizeForColorMatch(fullText));
-      }
+
+      const key = normalizeForColorMatch(fullText);
+      if (!key) continue;
+
+      if (hasRed)  { answerMap.set(key, 'red');  redSet.add(key);  }
+      if (hasBlue) { answerMap.set(key, 'blue'); blueSet.add(key); }
+      if (hlVal)   { answerMap.set(key, 'hl');   hlSet.add(key);   }
     }
   } catch (e) {
-    console.warn('[wordParser] Could not extract color info:', e);
+    console.warn('[wordParser] extractAnswerStyles failed:', e);
   }
+  return { answerMap, redSet, blueSet, hlSet };
+}
+
+/** Giữ backward compat — wrapper quanh extractAnswerStyles */
+async function extractRedTextSet(arrayBuffer) {
+  const { redSet, blueSet, hlSet } = await extractAnswerStyles(arrayBuffer);
+  for (const k of blueSet) redSet.add(k);
+  for (const k of hlSet)   redSet.add(k);
   return redSet;
+}
+
+/**
+ * Tiền xử lý bảng HTML thành structured text trước khi gửi AI.
+ * Xử lý: GROUPDRAG 2-cột header, DRAG/GROUPDRAG item|group, CLOZEDRAG _____
+ */
+function preprocessTablesInHtml(html) {
+  return html.replace(/<table[^>]*>([\s\S]*?)<\/table>/gi, function(fullMatch, tableContent) {
+    const rowMatches = tableContent.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || [];
+    if (rowMatches.length === 0) return fullMatch;
+    const rows = rowMatches.map(function(row) {
+      const cells = row.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || [];
+      return cells.map(function(cell) {
+        return cell.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      });
+    }).filter(function(r) { return r.some(function(x) { return x.length > 0; }); });
+    if (rows.length === 0) return '';
+    let colCount = 0;
+    rows.forEach(function(r) { if (r.length > colCount) colCount = r.length; });
+
+    // Type A: 2-cột header groupdrag (hàng đầu = tên nhóm)
+    if (colCount === 2 && rows.length >= 2) {
+      const h0 = rows[0];
+      const isGroupHeader = h0.length === 2 &&
+        (/^\d+[\)\.]/.test(h0[0]) || /nhóm|group/i.test(h0[0]));
+      if (isGroupHeader) {
+        const groupA = h0[0].replace(/^\d+[\)\.] */, '').trim();
+        const groupB = h0[1].replace(/^\d+[\)\.] */, '').trim();
+        const out = ['[NHOM: ' + groupA + '] | [NHOM: ' + groupB + ']'];
+        for (let i = 1; i < rows.length; i++) {
+          const r = rows[i];
+          const left = r[0] ? ('[ITEM_A: ' + r[0] + ']') : '';
+          const right = r[1] ? (' | [ITEM_B: ' + r[1] + ']') : '';
+          if (left) out.push(left + right);
+        }
+        return '\n' + out.join('\n') + '\n';
+      }
+    }
+
+    // Type B: CLOZEDRAG - cột trái có _____
+    if (colCount === 2) {
+      const hasBlank = rows.some(function(r) { return r[0] && r[0].indexOf('_____') >= 0; });
+      if (hasBlank) {
+        const slotLines = [];
+        const termLines = [];
+        rows.forEach(function(r) {
+          if (r[0] && r[0].indexOf('_____') >= 0) {
+            slotLines.push('[SLOT: ' + r[0] + '] -> [TERM: ' + (r[1] || '') + ']');
+          } else if (r[0] || r[1]) {
+            termLines.push(r.filter(Boolean).join(', '));
+          }
+        });
+        let resultLines = [];
+        if (termLines.length) resultLines.push('[TERMS: ' + termLines.join('; ') + ']');
+        resultLines = resultLines.concat(slotLines);
+        if (resultLines.length) return '\n' + resultLines.join('\n') + '\n';
+      }
+    }
+
+    // Type C: DRAG/GROUPDRAG - item -> group
+    if (colCount === 2) {
+      const dragLines = rows.map(function(r) {
+        const left = r[0] || '';
+        const right = r[1] || '';
+        if (!left && !right) return '';
+        return '[ITEM: ' + left + '] -> [GROUP: ' + right + ']';
+      }).filter(Boolean);
+      if (dragLines.length) return '\n' + dragLines.join('\n') + '\n';
+    }
+
+    // Default: flatten rows
+    return '\n' + rows.map(function(r) { return r.filter(Boolean).join('\t'); }).join('\n') + '\n';
+  });
 }
 
 function normalizeForColorMatch(text) {
@@ -441,12 +531,35 @@ export async function analyzeWordFileWithAI(file, onProgress = null) {
           return ` [IMG_${idx}] `;
         });
 
+        // ─── Bước 3: Trích xuất OOXML styles + đánh dấu [BLUE:]/[RED:]/[HL:] ───
+        const styleData = await extractAnswerStyles(arrayBuffer);
+        let markedHtml = processedHtml;
+
+        // highlight <mark> → [HL: text] (Yellow highlight NN3)
+        markedHtml = markedHtml.replace(/<mark>([\s\S]*?)<\/mark>/gi, function(_, inner) {
+          return '[HL: ' + inner.replace(/<[^>]+>/g, '').trim() + ']';
+        });
+
+        // Inject [BLUE:] / [RED:] từ answerMap (OOXML colors - cho MULTITRUEFALSE & SINGLE)
+        if (styleData && styleData.answerMap) {
+          styleData.answerMap.forEach(function(marker, key) {
+            if (!key || key.length < 2) return;
+            const parts = markedHtml.split(key);
+            if (parts.length > 1) {
+              const wrap = marker === 'blue' ? ('[BLUE: ' + key + ']') : (marker === 'red' ? ('[RED: ' + key + ']') : key);
+              markedHtml = parts.join(wrap);
+            }
+          });
+        }
+
+        // Tiền xử lý bảng thành structured text trước khi strip HTML
+        markedHtml = preprocessTablesInHtml(markedHtml);
+
         // Trích xuất text có đánh dấu bold (để AI biết đáp án đúng)
-        // Strong/b → **text**, để AI nhận ra đáp án in đậm
-        const plainText = processedHtml
+        const plainText = markedHtml
           // Thêm newline giữa 2 strong liền nhau (tránh đáp án groupdrag dính nhau)
-          .replace(/<\/strong>(\s*)<strong>/gi, '<\/strong>\n<strong>')
-          .replace(/<\/b>(\s*)<b>/gi, '<\/b>\n<b>')
+          .replace(/<\/strong>(\s*)<strong>/gi, '</strong>\n<strong>')
+          .replace(/<\/b>(\s*)<b>/gi, '</b>\n<b>')
           // Xử lý strong/b trước khi xóa tags → **text**
           .replace(/<strong>([\s\S]*?)<\/strong>/gi, (_, c) => `**${c.replace(/<[^>]+>/g, '')}**`)
           .replace(/<b>([\s\S]*?)<\/b>/gi, (_, c) => `**${c.replace(/<[^>]+>/g, '')}**`)

@@ -389,10 +389,16 @@ QUY TẮC XỬ LÝ ẢNH:
 
 === NHẬN DẠNG FORMAT VĂN BẢN QUAN TRỌNG ===
 Văn bản có thể chứa định dạng đặc biệt:
-- **text** hoặc __text__ = văn bản IN ĐẬM trong file Word gốc → ĐÂY LÀ DẤU HIỆU ĐÁP ÁN ĐÚNG
+- **text** hoặc __text__ = văn bản IN ĐẬM trong file Word gốc → DẤU HIỆU ĐÁP ÁN ĐÚNG (SINGLE/MULTISELECT)
+- [BLUE: text] = Dòng hoặc text có MÀU XANH (00B0F0/0070C0) trong file Word gốc → DẤU HIỆU ĐÁP ÁN ĐÚNG
+- [RED: text] = Dòng hoặc text có MÀU ĐỎ (FF0000/C00000) trong file Word gốc → DẤU HIỆU ĐÁP ÁN SAI
+- [HL: text] = Dòng hoặc text được HIGHLIGHT (vàng/xanh lá) trong file Word gốc → DẤU HIỆU ĐÁP ÁN ĐÚNG
 - Câu hỏi thường bắt đầu bằng "Câu N:" hoặc "Question N:" (bỏ số thứ tự khi điền vào field "question")
 - Phương án có thể là danh sách không có nhãn A/B/C/D (chỉ là các dòng/mục riêng lẻ)
 - Phương án có thể là danh sách có nhãn "1. 2. 3." hoặc "- item"
+- [SLOT: text] → [TERM: text] = Bảng kéo thả (cột trái = chỗ trống/slot câu hỏi, cột phải = term đúng)
+- [ITEM: text] → [GROUP: text] = Bảng phân loại (cột trái = item, cột phải = tên nhóm đích)
+- [NHOM: tên nhóm] = Header nhóm trong bảng groupdrag 2 cột (items theo cột)
 
 HỆ THỐNG HỖ TRỢ ĐÚNG 9 DẠNG CÂU HỎI - phân loại chính xác theo nội dung:
 
@@ -417,17 +423,20 @@ LƯU Ý: Khi options là danh sách "- item" hoặc "1. item", lấy phần text
 
 --- DẠNG 2: MULTISELECT (Trắc nghiệm nhiều đáp án đúng) ---
 Nhận dạng: Có cụm "(Chọn N)", "(Chọn 2)", "(Chọn 3)", "select all that apply", hoặc nhiều phương án in đậm.
-DẤU HIỆU: Trong văn bản LMS, các phương án đúng đều được **in đậm**, phương án sai không in đậm.
+Nhận dạng thêm: Cụm "[ ! Sinh viên chọn X phương án đúng nhất ]" hoặc tương tự → LUÔN là MULTISELECT.
+DẤU HIỆU đáp án đúng trong văn bản LMS:
+- Phương án đúng được **in đậm** (dấu **) HOẶC có [BLUE: ...] HOẶC có [HL: ...]
+- Phương án sai không in đậm và không có marker màu
 Cấu trúc JSON:
 {
   "type": "multiselect",
-  "question": "Nội dung câu hỏi (KHÔNG gồm 'Câu N:' hay '(Chọn 2)')",
+  "question": "Nội dung câu hỏi (KHÔNG gồm 'Câu N:', '(Chọn 2)', hay ghi chú '[ ! ...]')",
   "options": ["Phương án 1", "Phương án 2", "Phương án 3", "Phương án 4", "Phương án 5"],
   "corrects": [0, 2],
   "points": 1,
   "_needsReview": false
 }
-"corrects": mảng index (0-based) các đáp án đúng (phương án được in đậm **).
+"corrects": mảng index (0-based) các đáp án đúng (phương án in đậm ** hoặc có [BLUE:...]/[HL:...]).
 
 --- DẠNG 3: FILL (Điền vào chỗ trống) ---
 Nhận dạng: Có chỗ trống ___ hoặc ...... trong câu, hoặc có dòng "Đáp án:" kèm 1 từ/cụm từ, không có các phương án A/B/C.
@@ -558,12 +567,25 @@ Cấu trúc JSON:
 }
 
 --- DẠNG 9: MULTITRUEFALSE (Đúng/Sai nhiều phát biểu) ---
-Nhận dạng: 1 câu hỏi gốc kèm nhiều phát biểu con, mỗi phát biểu cần xác nhận Đúng hoặc Sai riêng lẻ.
-FORMAT LMS ĐẶC BIỆT: Mỗi phát biểu có dạng:
-  "Phát biểu...\nĐúng\n**Sai**" → correct: false (Sai in đậm)
-  "Phát biểu...\n**Đúng**\nSai" → correct: true (Đúng in đậm)
-  "Phát biểu...\nSai\n**Đúng**" → correct: true (Đúng in đậm)
-RULE: Từ nào (**Đúng** hay **Sai**) được in đậm = đó là đáp án đúng của phát biểu đó.
+Nhận dạng: 1 câu hỏi gốc kèm nhiều phát biểu con (2-4 phát biểu), mỗi phát biểu cần xác nhận Đúng hoặc Sai riêng lẻ.
+Nhận dạng: Câu hỏi gốc có dạng "phát biểu nào sau đây đúng/sai", "chọn đúng/sai cho các phát biểu", v.v.
+FORMAT VĂN BẢN CÓ MÀU (CSDL LMS - format mới, ưu tiên hơn):
+  Thứ tự trong văn bản đối với mỗi phát biểu:
+  [Phát biểu 1]
+  [BLUE: Đúng] → correct: true   (chữ "Đúng" có màu xanh BLUE = đáp án ĐÚNG)
+  Sai           → (không xét)
+  [Phát biểu 2]
+  [RED: Sai]  → correct: false  (chữ "Sai" có màu đỏ RED = đáp án SAI)
+  Đúng          → (không xét)
+  RULE MÀU (ƯU TIÊN CAO NHẤT):
+  - [BLUE: Đúng] → correct: true
+  - [BLUE: Sai]  → correct: false (hiếm)
+  - [RED: Sai]   → correct: false
+  - [RED: Đúng]  → correct: true (hiếm)
+  CHỮ CÓ MÀU là đáp án đúng của phát biểu đó, bất kể thứ tự Đúng/Sai.
+FORMAT VĂN BẢN CŨ (bold) - vẫn được hỗ trợ:
+  "Phát biểu...\n**Đúng**\nSai" → correct: true
+  "Phát biểu...\nĐúng\n**Sai**" → correct: false
 Cấu trúc JSON:
 {
   "type": "multitruefalse",
@@ -577,6 +599,20 @@ Cấu trúc JSON:
   "points": 1
 }
 Tối đa 4 phát biểu. Mỗi phát biểu: text = nội dung phát biểu (không có "Đúng/Sai"), correct = boolean.
+
+--- DẠNG BẢNG (Bảng 2 cột header nhóm - GROUPDRAG phức tạp) ---
+Nhận dạng: Văn bản có [NHOM: Nhóm A] / [NHOM: Nhóm B] hoặc bảng hàng đầu = tên nhóm, hàng tiếp = items theo cột:
+  "1) Nhóm A: Tên nhóm\t2) Nhóm B: Tên nhóm"
+  "item1\titem3"
+  "item2\titem4"
+→ Phân loại theo cột: cột 1 thuộc Nhóm A, cột 2 thuộc Nhóm B.
+→ Dùng GROUPDRAG với groups: [{name:'Tên nhóm A', items:[item1,item2]}, {name:'Tên nhóm B', items:[item3,item4]}]
+LƯU Ý: Phân biệt với DRAG (1-1): GROUPDRAG khi một nhóm có nhiều hơn 1 item.
+
+--- DẠNG BẢNG CANH (CLOZEDRAG từ bảng [SLOT] → [TERM]) ---
+Nhận dạng: Văn bản có dạng [SLOT: _____text câu hỏi] → [TERM: term đúng]:
+  "[SLOT: _____là phần mềm trung gian...] → [TERM: Hệ quản trị cơ sở dữ liệu]"
+→ type: "clozedrag", question = nối các SLOT thành đoạn văn liên tiếp (thay _____ bằng [N]), answers = danh sách TERM theo thứ tự slot.
 
 QUY TẮC CHUNG:
 - Trả về DUY NHẤT mảng JSON hợp lệ, không giải thích ngoài.

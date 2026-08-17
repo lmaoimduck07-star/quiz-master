@@ -15,6 +15,7 @@ import SystemSettingsManager from '../components/settings/SystemSettingsManager'
 import LiveMonitor from '../components/admin/LiveMonitor';
 import { storage } from '../utils/storage';
 import { storageV2 } from '../utils/storageV2';
+import { generateExamId, runDatabaseCleanup, normalizeAllExamIds } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -37,6 +38,8 @@ export default function AdminDashboard() {
   const [dbCleanupOpen, setDbCleanupOpen] = useState(false);
   const [dbCleanupLoading, setDbCleanupLoading] = useState(false);
   const [dbCleanupResult, setDbCleanupResult] = useState(null);
+  // Normalize IDs state
+  const [normalizeLoading, setNormalizeLoading] = useState(false);
 
   useEffect(() => {
     setDataLoading(true);
@@ -170,6 +173,30 @@ export default function AdminDashboard() {
             </button>
 
             <button
+              onClick={async () => {
+                if (!confirm('Chuẩn hóa toàn bộ Exam ID không đúng format?\nCác ID lạ sẽ được đổi sang [mã_môn]_bai_[01..99]\nThao tác này không thể hoàn tác!')) return;
+                setNormalizeLoading(true);
+                try {
+                  const result = await normalizeAllExamIds();
+                  addLog('System', `Chuẩn hóa Exam ID: sửa ${result?.fixed || 0} ID, xóa ${result?.ghostDeleted || 0} ghost doc (tổng ${result?.total || 0} đề thi)`, 'Info');
+                  alert(`✅ Hoàn tất!\n• Đã chuẩn hóa: ${result?.fixed || 0} Exam ID\n• Đã xóa ghost: ${result?.ghostDeleted || 0} doc`);
+                } catch (e) {
+                  alert('❌ Lỗi: ' + e.message);
+                } finally {
+                  setNormalizeLoading(false);
+                }
+              }}
+              disabled={normalizeLoading}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-colors hover:bg-slate-800 hover:text-violet-400 text-slate-500 text-sm disabled:opacity-50"
+              title="Chuẩn hóa Exam ID sang format [mã_môn]_bai_[01..99]"
+            >
+              {normalizeLoading
+                ? <><Loader2 className="h-5 w-5 animate-spin" /> Đang chạy...</>
+                : <><CheckCircle className="h-5 w-5" /> Chuẩn hóa Exam ID</>
+              }
+            </button>
+
+            <button
               onClick={handleExportData}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-colors hover:bg-slate-800 hover:text-white text-slate-500 text-sm"
               title="Tải về bản sao lưu dữ liệu hệ thống"
@@ -260,17 +287,10 @@ export default function AdminDashboard() {
                         let examCode = config.code;
 
                         if (!examId) {
-                          // Tạo ID sequential: đếm số exam hiện có của môn này
-                          const existingExams = await storageV2.loadExamsV2(currentSubject.id);
-                          let nextNum = existingExams.length + 1;
-                          // Đảm bảo không trùng ID
-                          let candidate = `${subjCode.toLowerCase()}_bai_${String(nextNum).padStart(2, '0')}`;
-                          while (existingExams.some(e => e.id === candidate)) {
-                            nextNum++;
-                            candidate = `${subjCode.toLowerCase()}_bai_${String(nextNum).padStart(2, '0')}`;
-                          }
-                          newExamId = candidate;
-                          examCode = config.code || `${subjCode}_BAI_${String(nextNum).padStart(2, '0')}`;
+                          // Dùng generateExamId() — scan số đã dùng, luôn chọn số nhỏ nhất chưa tồn tại
+                          newExamId = await generateExamId(currentSubject.id, subjCode);
+                          const padded = newExamId.split('_bai_')[1] || '01';
+                          examCode = config.code || `${subjCode}_BAI_${padded}`;
                         } else {
                           examCode = config.code || examId.toUpperCase().replace(/_/g, '_');
                         }
@@ -452,7 +472,7 @@ export default function AdminDashboard() {
                   onClick={() => { setDbCleanupOpen(false); setDbCleanupResult(null); }}
                   className="w-full mt-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 font-bold text-slate-700 dark:text-slate-200 transition-colors"
                 >
-                  Óng
+                  Đóng
                 </button>
               </div>
             ) : (
@@ -474,24 +494,25 @@ export default function AdminDashboard() {
                     Hủy
                   </button>
                   <button
-                    onClick={async () => {
-                      setDbCleanupLoading(true);
-                      try {
-                        const result = await storage.runDatabaseCleanup();
-                        setDbCleanupResult(result);
-                        addLog('System', 'Dọn dẹp Database: ' +
-                          `${result.staleSessions} session, ${result.oldAuditLogs} log, ${result.normalizedExamIds} exam ID`, 'Info');
-                      } catch (e) {
-                        setDbCleanupResult({ staleSessions: 0, oldAuditLogs: 0, normalizedExamIds: 0, errors: [e.message] });
-                      } finally {
-                        setDbCleanupLoading(false);
-                      }
-                    }}
+                      onClick={async () => {
+                        setDbCleanupLoading(true);
+                        try {
+                          const result = await runDatabaseCleanup();
+                          setDbCleanupResult(result);
+                          addLog('System', 'Dọn dẹp Database: ' +
+                            `${result.staleSessions} session, ${result.oldAuditLogs} log, ${result.normalizedExamIds} exam ID`, 'Info');
+                        } catch (e) {
+                          setDbCleanupResult({ staleSessions: 0, oldAuditLogs: 0, normalizedExamIds: 0, errors: [e.message] });
+                        } finally {
+                          setDbCleanupLoading(false);
+                        }
+                      }}
                     disabled={dbCleanupLoading}
                     className="flex-1 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 font-bold text-white transition-colors flex items-center justify-center gap-2"
                   >
                     {dbCleanupLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Đang chạy...</> : <><Database className="h-4 w-4" /> Xác nhận Dọn dẹp</>}
                   </button>
+
                 </div>
               </div>
             )}

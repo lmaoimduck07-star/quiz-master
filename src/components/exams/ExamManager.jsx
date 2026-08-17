@@ -4,6 +4,7 @@ import RandomExamModal from './RandomExamModal';
 import { ArrowLeft, Check, Dices, Download, Folder, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { storageV2 } from '../../utils/storageV2';
+import { generateExamId } from '../../services/db';
 
 export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEditor, onPlayExam }) {
   const [isRandomModalOpen, setIsRandomModalOpen] = useState(false);
@@ -172,10 +173,15 @@ export default function ExamManager({ subject, onBack, onUpdateSubject, onOpenEd
 
     if (importedExams.length > 0) {
       for (const ex of importedExams) {
+        // Sinh ID chính xác từ DB ngay trước khi lưu — tránh trùng với exam đã tồn tại
+        const subjCode = ex.subjectCode || subject.code || 'MON';
+        const correctId = await generateExamId(subject.id, subjCode);
+        const correctCode = `${subjCode.toUpperCase()}_BAI_${correctId.split('_bai_')[1] || '01'}`;
         const { questions, ...examMeta } = ex;
-        await storageV2.saveExamV2(examMeta);
+        const finalMeta = { ...examMeta, id: correctId, code: correctCode };
+        await storageV2.saveExamV2(finalMeta);
         if (questions && questions.length > 0) {
-          await storageV2.saveQuestionsV2(examMeta.id, questions);
+          await storageV2.saveQuestionsV2(correctId, questions);
         }
       }
     }

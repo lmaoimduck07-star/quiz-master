@@ -242,6 +242,7 @@ export async function normalizeAllExamIds() {
     // Bước 2: Kiểm tra từng exam
     const examSnap = await getDocs(collection(db, EXAMS_COL));
     let fixed = 0;
+    let ghostDeleted = 0;
     const counterMap = new Map(); // subjId → số thứ tự tiếp theo
 
     // Sắp xếp: exam có ID chuẩn trước để không bị đụng số thứ tự
@@ -269,7 +270,25 @@ export async function normalizeAllExamIds() {
     for (const d of randomExams) {
       const data = d.data();
       const subjId = data.subjectId;
-      if (!subjId) continue;
+
+      // Ghost doc (không có subjectId / title) → xóa luôn
+      if (!subjId || !data.title) {
+        try {
+          const ghostQSnap = await getDocs(collection(db, EXAMS_COL, d.id, 'questions'));
+          if (!ghostQSnap.empty) {
+            const ghostBatch = writeBatch(db);
+            ghostQSnap.docs.forEach(qDoc => ghostBatch.delete(qDoc.ref));
+            await ghostBatch.commit();
+          }
+          await deleteDoc(doc(db, EXAMS_COL, d.id));
+          ghostDeleted++;
+          console.log(`[DB:Exam] Xóa ghost doc: ${d.id}`);
+        } catch (e) {
+          console.warn(`[DB:Exam] Không xóa được ghost ${d.id}:`, e);
+        }
+        continue;
+      }
+
       const subjCode = subjectCodeMap.get(subjId) || 'mon';
 
       // Tìm số thứ tự tiếp theo chưa dùng
@@ -294,17 +313,15 @@ export async function normalizeAllExamIds() {
         normalizedAt: nowISO(),
       }));
 
-      // Di chuyển câu hỏi sang ID mới
+      // Di chuyển câu hỏi sang ID mới & xóa câu hỏi cũ trong 1 batch
       if (!oldQSnap.empty) {
-        const batch = writeBatch(db);
-        oldQSnap.docs.forEach(qDoc => {
-          batch.set(doc(db, EXAMS_COL, newId, 'questions', qDoc.id), qDoc.data());
-        });
-        await batch.commit();
-
-        // Xóa câu hỏi cũ
+        const copyBatch = writeBatch(db);
         const delBatch = writeBatch(db);
-        oldQSnap.docs.forEach(qDoc => delBatch.delete(qDoc.ref));
+        oldQSnap.docs.forEach(qDoc => {
+          copyBatch.set(doc(db, EXAMS_COL, newId, 'questions', qDoc.id), qDoc.data());
+          delBatch.delete(qDoc.ref);
+        });
+        await copyBatch.commit();
         await delBatch.commit();
       }
 
@@ -314,7 +331,7 @@ export async function normalizeAllExamIds() {
       console.log(`[DB:Exam] Chuẩn hóa ID: ${d.id} → ${newId}`);
     }
 
-    console.log(`[DB:Exam] Chuẩn hóa hoàn tất! Đã chuyển đổi ${fixed} exam ID.`);
-    return { fixed, total: examSnap.size };
+    console.log(`[DB:Exam] Chuẩn hóa hoàn tất! Sửa ${fixed} ID, xóa ${ghostDeleted} ghost doc.`);
+    return { fixed, ghostDeleted, total: examSnap.size };
   } catch (e) { dbError('Exam', 'normalizeAllExamIds', e); return null; }
 }

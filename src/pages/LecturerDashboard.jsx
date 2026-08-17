@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Activity, BookOpen, Code2, BarChart3, LogOut,
+  BookOpen, Code2, BarChart3, LogOut,
   Sun, Moon, GraduationCap, Users, ChevronRight,
   Trophy, Clock, CheckCircle, TrendingUp
 } from 'lucide-react';
@@ -9,9 +9,10 @@ import SubjectManager from '../components/exams/SubjectManager';
 import ExamManager from '../components/exams/ExamManager';
 import ExamEditor from '../components/exams/ExamEditor';
 import CodingProblemManager from '../components/exams/CodingProblemManager';
-import LiveMonitor from '../components/admin/LiveMonitor';
+
 import { storage } from '../utils/storage';
 import { storageV2 } from '../utils/storageV2';
+import { generateExamId } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -171,7 +172,7 @@ export default function LecturerDashboard() {
   const navigate = useNavigate();
   const { logout, currentUser } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState('live_monitor');
+  const [activeTab, setActiveTab] = useState('subjects');
   const [subjects, setSubjects] = useState([]);
   const [currentSubject, setCurrentSubject] = useState(null);
   const [editingExamId, setEditingExamId] = useState(null);
@@ -204,7 +205,6 @@ export default function LecturerDashboard() {
   };
 
   const navItems = [
-    { tab: 'live_monitor', icon: <Activity className="h-5 w-5" />, label: 'Live Monitor', badge: <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" /> },
     { tab: 'subjects', icon: <BookOpen className="h-5 w-5" />, label: 'Môn học & Đề thi' },
     { tab: 'coding', icon: <Code2 className="h-5 w-5" />, label: 'Đề Lập trình' },
     { tab: 'results', icon: <BarChart3 className="h-5 w-5" />, label: 'Kết quả thi' },
@@ -227,15 +227,10 @@ export default function LecturerDashboard() {
     let newExamId = examId;
     let examCode = config.code;
     if (!examId) {
-      const existingExams = await storageV2.loadExamsV2(currentSubject.id);
-      let nextNum = existingExams.length + 1;
-      let candidate = `${subjCode.toLowerCase()}_bai_${String(nextNum).padStart(2, '0')}`;
-      while (existingExams.some(e => e.id === candidate)) {
-        nextNum++;
-        candidate = `${subjCode.toLowerCase()}_bai_${String(nextNum).padStart(2, '0')}`;
-      }
-      newExamId = candidate;
-      examCode = config.code || `${subjCode}_BAI_${String(nextNum).padStart(2, '0')}`;
+      // Dùng generateExamId() — scan số đã dùng, luôn chọn số nhỏ nhất chưa tồn tại
+      newExamId = await generateExamId(currentSubject.id, subjCode);
+      const padded = newExamId.split('_bai_')[1] || '01';
+      examCode = config.code || `${subjCode}_BAI_${padded}`;
     } else {
       examCode = config.code || examId.toUpperCase().replace(/_/g, '_');
     }
@@ -443,7 +438,7 @@ export default function LecturerDashboard() {
 
         {/* Tab content */}
         <main className={`flex-1 overflow-y-auto ${showSidebar ? 'p-6' : 'p-0'}`}>
-          {activeTab === 'live_monitor' && <LiveMonitor />}
+
           {activeTab === 'subjects' && (
             <div className="space-y-6">{renderSubjectsTab()}</div>
           )}
