@@ -18,7 +18,7 @@ export const saveGeminiApiKey = (key) => {
 // Models được thử theo thứ tự ưu tiên — mới nhất/mạnh nhất lên đầu
 const CANDIDATE_MODELS = [
   'gemini-3.6-flash',
-  'gemini-2.5-flash',
+  'gemini-3.7-flash',
   'gemini-3.5-flash',
   'gemini-flash-latest'
 ];
@@ -26,7 +26,7 @@ const CANDIDATE_MODELS = [
 // Models hỗ trợ Vision (multimodal)
 const VISION_MODELS = [
   'gemini-3.6-flash',
-  'gemini-2.5-flash',
+  'gemini-3.7-flash',
   'gemini-3.5-flash',
   'gemini-flash-latest'
 ];

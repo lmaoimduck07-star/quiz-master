@@ -18,7 +18,7 @@ const HL_CORRECT   = new Set(['yellow', 'green', 'cyan']);
 async function extractAnswerStyles(arrayBuffer) {
   const answerMap = new Map();
   const redSet  = new Set();
-  const blueSet = new LogicSet ? new Set() : new Set();
+  const blueSet = new Set();
   const hlSet   = new Set();
 
   try {
@@ -156,12 +156,22 @@ function isRedText(text, redTextSet) {
   if (!redTextSet || redTextSet.size === 0) return false;
   const normalized = normalizeForColorMatch(text);
   if (redTextSet.has(normalized)) return true;
-  // Cũng thử match với prefix A./B./C. bỏ đi — chỉ dùng exact match
+  // Cũng thử match với prefix A./B./C. bỏ đi
   const withoutLabel = normalized.replace(/^[a-h][.)\-:]\s*/i, '');
   if (withoutLabel && withoutLabel !== normalized) {
+    if (redTextSet.has(withoutLabel)) return true;
     for (const entry of redTextSet) {
       const entryClean = entry.replace(/^[a-h][.)\-:]\s*/i, '');
-      if (entryClean && entryClean === withoutLabel) return true;
+      if (entryClean && (entryClean === withoutLabel || (entryClean.length > 6 && (withoutLabel.includes(entryClean) || entryClean.includes(withoutLabel))))) {
+        return true;
+      }
+    }
+  } else {
+    for (const entry of redTextSet) {
+      const entryClean = entry.replace(/^[a-h][.)\-:]\s*/i, '');
+      if (entryClean && (entryClean === normalized || (entryClean.length > 6 && (normalized.includes(entryClean) || entryClean.includes(normalized))))) {
+        return true;
+      }
     }
   }
   return false;
