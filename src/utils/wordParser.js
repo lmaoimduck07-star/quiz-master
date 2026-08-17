@@ -1,6 +1,6 @@
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
-import { parseWordContentWithAI } from './gemini.js';
+import { parseWordContentWithAI, parseExamFromImagesWithAI } from './gemini.js';
 
 // ─────────────────────────────────────────────────────────────
 // OOXML COLOR EXTRACTION — đọc trực tiếp XML trong .docx
@@ -441,9 +441,21 @@ export async function analyzeWordFileWithAI(file, onProgress = null) {
           return ` [IMG_${idx}] `;
         });
 
-        // Trích xuất plain text (giữ newline block elements)
+        // Trích xuất text có đánh dấu bold (để AI biết đáp án đúng)
+        // Strong/b → **text**, để AI nhận ra đáp án in đậm
         const plainText = processedHtml
-          .replace(/<\/p>|<br\s*\/?>|<\/li>|<\/div>|<\/tr>|<\/td>/gi, '\n')
+          // Thêm newline giữa 2 strong liền nhau (tránh đáp án groupdrag dính nhau)
+          .replace(/<\/strong>(\s*)<strong>/gi, '<\/strong>\n<strong>')
+          .replace(/<\/b>(\s*)<b>/gi, '<\/b>\n<b>')
+          // Xử lý strong/b trước khi xóa tags → **text**
+          .replace(/<strong>([\s\S]*?)<\/strong>/gi, (_, c) => `**${c.replace(/<[^>]+>/g, '')}**`)
+          .replace(/<b>([\s\S]*?)<\/b>/gi, (_, c) => `**${c.replace(/<[^>]+>/g, '')}**`)
+          // List items → dash (giữ số thứ tự cho CSDL_02 format ol/li)
+          .replace(/<li>/gi, '\n- ')
+          .replace(/<\/li>/gi, '')
+          // Block elements → newline
+          .replace(/<\/p>|<br\s*\/?>|<\/div>|<\/tr>|<\/td>|<\/ol>|<\/ul>|<\/h[1-6]>/gi, '\n')
+          // Xóa các tag còn lại
           .replace(/<[^>]+>/g, '')
           .replace(/\n{3,}/g, '\n\n')
           .replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
@@ -477,6 +489,60 @@ export async function analyzeWordFileWithAI(file, onProgress = null) {
     };
     reader.readAsArrayBuffer(file);
   });
+}
+
+// ─────────────────────────────────────────────────────────────
+// PHÂN TÍCH ĐỀ THI TỪ ẢNH CHỤP / SCAN (AI Vision)
+// Nhận danh sách File ảnh (PNG/JPG/WebP), chuyển sang base64,
+// rồi gọi parseExamFromImagesWithAI để OCR & bóc tách.
+// Returns { format: 'image_ai', questions, sections: [] }
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Chuyển đổi File object → {mimeType, data} để truyền cho Gemini Vision API
+ */
+function fileToBase64ImageData(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target.result; // "data:image/png;base64,...."
+      const [header, data] = dataUrl.split(',');
+      const mimeType = header.match(/data:([^;]+);/)?.[1] || file.type || 'image/jpeg';
+      resolve({ mimeType, data, name: file.name });
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Phân tích đề thi từ danh sách file ảnh chụp/scan bằng AI Vision.
+ *
+ * @param {File[]} files - Danh sách file ảnh (PNG, JPG, JPEG, WebP)
+ * @param {function} [onProgress] - Callback(done, total)
+ * @returns {Promise<{format: string, questions: Array, sections: Array}>}
+ */
+export async function analyzeImageFilesWithAI(files, onProgress = null) {
+  if (!files || files.length === 0) {
+    return { format: 'image_ai', questions: [], sections: [] };
+  }
+
+  // Lọc chỉ file ảnh hợp lệ
+  const validFiles = Array.from(files).filter(f =>
+    /\.(png|jpe?g|webp)$/i.test(f.name) || /^image\//i.test(f.type)
+  );
+  if (validFiles.length === 0) {
+    return { format: 'image_ai', questions: [], sections: [] };
+  }
+
+  // Chuyển tất cả file → base64
+  const images = await Promise.all(validFiles.map(f => fileToBase64ImageData(f)));
+
+  // Gọi AI Vision bóc tách
+  const questions = await parseExamFromImagesWithAI(images, onProgress);
+
+  console.log('[analyzeImageFilesWithAI] AI trả về câu hỏi:', questions.length);
+  return { format: 'image_ai', questions, sections: [] };
 }
 
 

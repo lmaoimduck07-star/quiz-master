@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AuthBackground from '../components/ui/AuthBackground';
-import { GraduationCap, Shield, User, Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
+import { GraduationCap, Shield, User, BookOpen, Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -32,7 +32,9 @@ export default function Login() {
       const target = sessionStorage.getItem('qm_redirect_after_login');
       if (target) { sessionStorage.removeItem('qm_redirect_after_login'); return target; }
     } catch (e) {}
-    return role === 'Admin' ? '/admin/dashboard' : '/client/dashboard';
+    if (role === 'Admin') return '/admin/dashboard';
+    if (role === 'Lecturer') return '/lecturer/dashboard';
+    return '/client/dashboard';
   };
 
   useEffect(() => {
@@ -70,7 +72,7 @@ export default function Login() {
     try {
       const result = await loginWithGoogleReal();
       if (result.requiresRoleSelection) { setPendingUser(result.user); setShowRoleModal(true); }
-      else { navigate(result.role === 'Admin' ? '/admin/dashboard' : '/client/dashboard'); }
+      else { navigate(getRedirectTarget(result.role)); }
     } catch (err) { setError(err.message || 'Đăng nhập Google thất bại!'); }
     finally { setGoogleLoading(false); }
   };
@@ -173,29 +175,48 @@ export default function Login() {
           <div className="w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl border border-white/20 dark:border-slate-700/50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl">
             <div className="pt-7 pb-3 px-7 text-center">
               <h2 className="text-xl font-bold text-slate-800 dark:text-white">Chọn vai trò truy cập</h2>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Tài khoản của bạn có nhiều quyền truy cập</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Tài khoản của bạn có {pendingUser.roles?.length || 1} quyền truy cập</p>
             </div>
             <div className="space-y-3 px-6 pb-5 pt-3">
-              <button onClick={() => handleSelectRole('Admin')}
-                className="w-full py-4 px-5 border border-slate-200 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:border-blue-300 dark:hover:border-blue-700 rounded-2xl flex items-center gap-4 group transition-all duration-200 bg-white dark:bg-slate-800/50">
-                <div className="p-2 rounded-xl bg-purple-100 dark:bg-purple-900/30">
-                  <Shield className="h-5 w-5 text-purple-500 group-hover:scale-110 transition-transform" />
-                </div>
-                <div className="text-left">
-                  <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">Vào quản trị (Admin)</div>
-                  <div className="text-[10px] text-slate-400 dark:text-slate-500">Quản lý môn học, đề thi &amp; tài khoản</div>
-                </div>
-              </button>
-              <button onClick={() => handleSelectRole('Student')}
-                className="w-full py-4 px-5 border border-slate-200 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:border-blue-300 dark:hover:border-blue-700 rounded-2xl flex items-center gap-4 group transition-all duration-200 bg-white dark:bg-slate-800/50">
-                <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-900/30">
-                  <User className="h-5 w-5 text-blue-500 group-hover:scale-110 transition-transform" />
-                </div>
-                <div className="text-left">
-                  <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">Vào học tập (Học sinh)</div>
-                  <div className="text-[10px] text-slate-400 dark:text-slate-500">Luyện tập các đề thi &amp; thi mô phỏng</div>
-                </div>
-              </button>
+              {/* Render linh hoạt dựa theo user.roles */}
+              {(pendingUser.roles || ['Student']).map((role) => {
+                const roleConfig = {
+                  Admin: {
+                    icon: <Shield className="h-5 w-5 text-purple-500 group-hover:scale-110 transition-transform" />,
+                    bg: 'bg-purple-100 dark:bg-purple-900/30',
+                    label: 'Vào quản trị (Admin)',
+                    desc: 'Quản lý môn học, đề thi & tài khoản',
+                  },
+                  Lecturer: {
+                    icon: <BookOpen className="h-5 w-5 text-amber-500 group-hover:scale-110 transition-transform" />,
+                    bg: 'bg-amber-100 dark:bg-amber-900/30',
+                    label: 'Vào giảng dạy (Giảng viên)',
+                    desc: 'Soạn đề, giám sát thi & xem kết quả',
+                  },
+                  Student: {
+                    icon: <User className="h-5 w-5 text-blue-500 group-hover:scale-110 transition-transform" />,
+                    bg: 'bg-blue-100 dark:bg-blue-900/30',
+                    label: 'Vào học tập (Học sinh)',
+                    desc: 'Luyện tập các đề thi & thi mô phỏng',
+                  },
+                };
+                const cfg = roleConfig[role] || roleConfig['Student'];
+                return (
+                  <button
+                    key={role}
+                    onClick={() => handleSelectRole(role)}
+                    className="w-full py-4 px-5 border border-slate-200 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:border-blue-300 dark:hover:border-blue-700 rounded-2xl flex items-center gap-4 group transition-all duration-200 bg-white dark:bg-slate-800/50"
+                  >
+                    <div className={`p-2 rounded-xl ${cfg.bg}`}>
+                      {cfg.icon}
+                    </div>
+                    <div className="text-left">
+                      <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">{cfg.label}</div>
+                      <div className="text-[10px] text-slate-400 dark:text-slate-500">{cfg.desc}</div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
             <div className="bg-slate-50/80 dark:bg-slate-950/50 px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex justify-center">
               <button onClick={() => { setShowRoleModal(false); setPendingUser(null); }}

@@ -127,6 +127,7 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
               >
                 <option value="All">Tất cả vai trò</option>
                 <option value="Admin">Admin</option>
+                <option value="Lecturer">Giảng viên</option>
                 <option value="Student">Học sinh</option>
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500 pointer-events-none" />
@@ -176,9 +177,15 @@ export default function UserManager({ users, onAddUser, onUpdateUser, onDeleteUs
                           {(user.roles || [user.role || 'Student']).map(r => (
                             <span
                               key={r}
-                              className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${r === 'Admin' ? 'bg-purple-100 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400' : 'bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400'}`}
+                              className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                                r === 'Admin'
+                                  ? 'bg-purple-100 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400'
+                                  : r === 'Lecturer'
+                                  ? 'bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400'
+                                  : 'bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400'
+                              }`}
                             >
-                              {r}
+                              {r === 'Lecturer' ? 'Giảng viên' : r}
                             </span>
                           ))}
                         </div>

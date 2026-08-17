@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { LayoutDashboard, Users, FileText, Activity, LogOut, Upload, Search, ChevronLeft, ChevronRight, BookOpen, Sun, Moon, Code2, Settings } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Activity, LogOut, Upload, Search, ChevronLeft, ChevronRight, BookOpen, Sun, Moon, Code2, Settings, Database, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 import SubjectManager from '../components/exams/SubjectManager';
 import ExamManager from '../components/exams/ExamManager';
 import ExamEditor from '../components/exams/ExamEditor';
@@ -33,6 +33,10 @@ export default function AdminDashboard() {
   const [logs, setLogs] = useState([]);
   const [examResults, setExamResults] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
+  // DB Cleanup state
+  const [dbCleanupOpen, setDbCleanupOpen] = useState(false);
+  const [dbCleanupLoading, setDbCleanupLoading] = useState(false);
+  const [dbCleanupResult, setDbCleanupResult] = useState(null);
 
   useEffect(() => {
     setDataLoading(true);
@@ -78,18 +82,7 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  // Đã xóa auto-save bulk subjects vì V2 lưu từng subject độc lập.
-
-  // Auto-save khi users thay đổi (Chỉ lưu sau khi đã tải xong dữ liệu từ Firebase)
-  const usersLoadedRef = React.useRef(false);
-  useEffect(() => {
-    if (dataLoading) return;
-    if (!usersLoadedRef.current) {
-      usersLoadedRef.current = true;
-      return;
-    }
-    storage.saveUsers(users);
-  }, [users, dataLoading]);
+  // Không có auto-save saveUsers nữa — Atomic CRUD gỏi trực tiếp Firestore khi có thay đổi.
 
   const addLog = async (category, action, severity, payload = null) => {
     const newLog = {
@@ -167,6 +160,14 @@ export default function AdminDashboard() {
             ))}
 
             <div className="h-px bg-slate-800 my-3" />
+
+            <button
+              onClick={() => setDbCleanupOpen(true)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-colors hover:bg-slate-800 hover:text-amber-400 text-slate-500 text-sm"
+              title="Dọn dẹp Ghost Documents và chuẩn hóa ID"
+            >
+              <Database className="h-5 w-5" /> Dọn dẹp Database
+            </button>
 
             <button
               onClick={handleExportData}
@@ -373,36 +374,36 @@ export default function AdminDashboard() {
             <div className="space-y-6">
               <UserManager
                 users={users}
-                onAddUser={(u) => {
-                  setUsers([...users, u]);
+                onAddUser={async (u) => {
+                  // Atomic CREATE — chỉ thêm đúng 1 document, không ghi đè toàn bộ
+                  await storage.createUser(u);
                   const payload = { newUser: { ...u, password: '***' } };
                   addLog('Manager', `Tạo tài khoản mới: ${u.username} (${u.fullName})`, 'Info', payload);
                 }}
-                onUpdateUser={(updated) => {
+                onUpdateUser={async (updated) => {
+                  // Atomic UPDATE — chỉ cập nhật đúng các trường thay đổi
                   const oldUser = users.find(u => u.id === updated.id);
-                  setUsers(users.map(u => u.id === updated.id ? updated : u));
+                  const { id, ...fields } = updated;
+                  await storage.updateUser(id, fields);
 
-                  // So sánh sự khác biệt của permissions nếu có
                   const oldPerm = oldUser?.permissions || {};
                   const newPerm = updated.permissions || {};
                   const permDiffs = [];
-
                   if (oldPerm.codingAccess !== newPerm.codingAccess) {
                     permDiffs.push(`Coding & Vấn đáp: ${oldPerm.codingAccess ? 'Có' : 'Không'} -> ${newPerm.codingAccess ? 'Có' : 'Không'}`);
                   }
-
                   const diffText = permDiffs.length > 0 ? ` (Thay đổi quyền: ${permDiffs.join(', ')})` : '';
                   const payload = {
                     oldUser: oldUser ? { ...oldUser, password: '***' } : null,
                     newUser: { ...updated, password: '***' },
                     changes: permDiffs
                   };
-
                   addLog('Manager', `Cập nhật tài khoản: ${updated.username}${diffText}`, 'Info', payload);
                 }}
-                onDeleteUser={(id) => {
+                onDeleteUser={async (id) => {
+                  // Atomic DELETE — chỉ xóa đúng 1 document
                   const targetUser = users.find(u => u.id === id);
-                  setUsers(users.filter(u => u.id !== id));
+                  await storage.deleteUser(id);
                   const payload = { deletedUser: targetUser ? { ...targetUser, password: '***' } : null };
                   addLog('Manager', `Xóa tài khoản: ${targetUser?.username || id}`, 'Critical', payload);
                 }}
@@ -411,6 +412,92 @@ export default function AdminDashboard() {
           )}
         </main>
       </div>
+
+      {/* ─── DB Cleanup Modal ──────────────────────────────────────────── */}
+      {dbCleanupOpen && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/30">
+                <Database className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h3 className="font-black text-slate-800 dark:text-white text-lg">Dọn dẹp & Tối ưu Database</h3>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Kiểm tra và xử lý dữ liệu rác trong Firestore</p>
+              </div>
+            </div>
+
+            {dbCleanupResult ? (
+              <div className="p-6 space-y-3">
+                <div className="flex items-center gap-2 mb-4">
+                  <CheckCircle className="h-5 w-5 text-emerald-500" />
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">Hoàn thành!</span>
+                </div>
+                {[
+                  { label: 'Session rác đã xóa', value: dbCleanupResult.staleSessions },
+                  { label: 'Audit log cũ đã xóa', value: dbCleanupResult.oldAuditLogs },
+                  { label: 'Exam ID đã chuẩn hóa', value: dbCleanupResult.normalizedExamIds },
+                ].map(({ label, value }) => (
+                  <div key={label} className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800">
+                    <span className="text-sm text-slate-600 dark:text-slate-400">{label}</span>
+                    <span className="font-black text-slate-800 dark:text-white">{value}</span>
+                  </div>
+                ))}
+                {dbCleanupResult.errors?.length > 0 && (
+                  <div className="mt-3 p-3 bg-red-50 dark:bg-red-950/30 rounded-xl text-xs text-red-600 dark:text-red-400 font-mono">
+                    {dbCleanupResult.errors.join('\n')}
+                  </div>
+                )}
+                <button
+                  onClick={() => { setDbCleanupOpen(false); setDbCleanupResult(null); }}
+                  className="w-full mt-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 font-bold text-slate-700 dark:text-slate-200 transition-colors"
+                >
+                  Óng
+                </button>
+              </div>
+            ) : (
+              <div className="p-6 space-y-4">
+                <div className="text-sm text-slate-500 dark:text-slate-400 space-y-1.5">
+                  <p>⚠️ Hành động này sẽ:</p>
+                  <ul className="list-disc list-inside space-y-1 mt-2 font-medium">
+                    <li>Xóa các phiên thi rác ({'>'} 2 phút không hoạt động)</li>
+                    <li>Xóa Audit Log cũ hơn 14 ngày</li>
+                    <li>Chuẩn hóa đỏ thị có ID ngẫu nhiên sang format chuẩn</li>
+                  </ul>
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => { setDbCleanupOpen(false); setDbCleanupResult(null); }}
+                    className="flex-1 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    disabled={dbCleanupLoading}
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setDbCleanupLoading(true);
+                      try {
+                        const result = await storage.runDatabaseCleanup();
+                        setDbCleanupResult(result);
+                        addLog('System', 'Dọn dẹp Database: ' +
+                          `${result.staleSessions} session, ${result.oldAuditLogs} log, ${result.normalizedExamIds} exam ID`, 'Info');
+                      } catch (e) {
+                        setDbCleanupResult({ staleSessions: 0, oldAuditLogs: 0, normalizedExamIds: 0, errors: [e.message] });
+                      } finally {
+                        setDbCleanupLoading(false);
+                      }
+                    }}
+                    disabled={dbCleanupLoading}
+                    className="flex-1 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 font-bold text-white transition-colors flex items-center justify-center gap-2"
+                  >
+                    {dbCleanupLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Đang chạy...</> : <><Database className="h-4 w-4" /> Xác nhận Dọn dẹp</>}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

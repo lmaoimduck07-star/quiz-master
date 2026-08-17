@@ -373,8 +373,177 @@ export default function QuestionModal({ isOpen, questionData, onSave, onClose })
       </div>
     );
   }
+  // ===== PHÂN LOẠI NHÓM — sửa tên nhóm và danh sách items =====
+  else if (formData.type === 'groupdrag') {
+    // Đảm bảo groups tồn tại với format đúng
+    const groups = (formData.groups || []).map(g => ({
+      groupName: g.groupName ?? g.name ?? '',
+      items: Array.isArray(g.items) ? g.items : [],
+    }));
+    dynamicBody = (
+      <div className="mt-6 border-t pt-6">
+        <label className="block text-xs font-bold text-slate-500 uppercase mb-3 tracking-widest">
+          Các Nhóm Phân Loại <span className="normal-case font-medium text-slate-400">— chỉnh tên nhóm và thêm/xóa từng item</span>
+        </label>
+        {groups.map((g, gi) => (
+          <div key={gi} className="bg-slate-50 p-4 border-2 border-slate-200 rounded-2xl mb-4 shadow-sm">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="font-black text-white bg-indigo-500 w-8 h-8 flex items-center justify-center rounded-full flex-shrink-0 text-sm">{gi + 1}</span>
+              <input
+                type="text"
+                className="flex-1 p-3 border-2 border-indigo-200 rounded-xl outline-none focus:border-indigo-500 font-bold text-indigo-700 bg-white shadow-sm"
+                placeholder={`Tên nhóm ${gi + 1}...`}
+                value={g.groupName}
+                onChange={(e) => {
+                  const arr = groups.map(x => ({ ...x, items: [...x.items] }));
+                  arr[gi].groupName = e.target.value;
+                  setFormData({ ...formData, groups: arr });
+                }}
+              />
+              {groups.length > 2 && (
+                <Button variant="outline" onClick={() => {
+                  const arr = groups.filter((_, i) => i !== gi);
+                  setFormData({ ...formData, groups: arr });
+                }} className="text-red-500 hover:text-white bg-white hover:bg-red-500 border border-red-200 font-bold gap-1 px-3">
+                  <Trash2 className="h-4 w-4" /> Xóa
+                </Button>
+              )}
+            </div>
+            <div className="flex flex-col gap-2 mb-2">
+              {g.items.map((item, ii) => (
+                <div key={ii} className="flex gap-2 items-center">
+                  <span className="text-xs font-bold text-slate-400 w-5 text-right flex-shrink-0">{ii + 1}.</span>
+                  <input
+                    type="text"
+                    className="flex-1 p-2.5 border-2 border-emerald-200 bg-emerald-50 rounded-xl outline-none focus:border-emerald-500 font-semibold text-emerald-800 text-sm shadow-sm"
+                    value={item}
+                    placeholder="Nội dung item..."
+                    onChange={(e) => {
+                      const arr = groups.map(x => ({ ...x, items: [...x.items] }));
+                      arr[gi].items[ii] = e.target.value;
+                      setFormData({ ...formData, groups: arr });
+                    }}
+                  />
+                  <Button variant="outline" onClick={() => {
+                    const arr = groups.map(x => ({ ...x, items: [...x.items] }));
+                    arr[gi].items.splice(ii, 1);
+                    setFormData({ ...formData, groups: arr });
+                  }} className="text-slate-400 hover:text-red-500 hover:bg-red-50 border-transparent hover:border-red-200 p-2 h-auto rounded-xl">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <Button variant="ghost" onClick={() => {
+              const arr = groups.map(x => ({ ...x, items: [...x.items] }));
+              arr[gi].items.push('');
+              setFormData({ ...formData, groups: arr });
+            }} className="text-emerald-600 hover:bg-emerald-50 font-bold text-sm gap-1 mt-1">
+              <Plus className="h-4 w-4" /> Thêm item
+            </Button>
+          </div>
+        ))}
+        <Button variant="outline" onClick={() => {
+          const arr = [...groups.map(x => ({ ...x, items: [...x.items] })), { groupName: '', items: [] }];
+          setFormData({ ...formData, groups: arr });
+        }} className="text-indigo-600 border-indigo-200 hover:bg-indigo-50 font-bold mt-1 gap-2">
+          <Plus className="h-4 w-4" /> Thêm nhóm mới
+        </Button>
+      </div>
+    );
+  }
+  // ===== KÉO VÀO ĐOẠN VĂN — sửa câu hỏi + danh sách đáp án theo thứ tự =====
+  else if (formData.type === 'clozedrag') {
+    const answers = formData.answers || [];
+    dynamicBody = (
+      <div className="mt-6 border-t pt-6">
+        <label className="block text-xs font-bold text-slate-500 uppercase mb-3 tracking-widest">
+          Từ Khóa Đáp Án <span className="normal-case font-medium text-slate-400">— theo thứ tự [1][2][3] trong đề bài</span>
+        </label>
+        {answers.map((w, i) => (
+          <div key={i} className="flex gap-3 mb-3 items-center">
+            <span className="font-bold text-white bg-teal-500 w-8 h-8 flex items-center justify-center rounded-full flex-shrink-0">
+              {i + 1}
+            </span>
+            <input
+              type="text"
+              className="flex-1 p-3 border-2 border-teal-200 bg-teal-50 rounded-xl outline-none focus:border-teal-500 font-bold text-teal-800 shadow-sm"
+              value={w}
+              placeholder={`Từ điền vào chỗ ${i + 1}...`}
+              onChange={(e) => {
+                const arr = [...answers]; arr[i] = e.target.value;
+                setFormData({ ...formData, answers: arr });
+              }}
+            />
+            <Button variant="outline" onClick={() => {
+              const arr = answers.filter((_, idx) => idx !== i);
+              setFormData({ ...formData, answers: arr });
+            }} className="text-slate-400 hover:text-red-500 hover:bg-red-50 border-transparent hover:border-red-200 p-3 h-auto rounded-xl">
+              <Trash2 className="h-5 w-5" />
+            </Button>
+          </div>
+        ))}
+        <Button variant="outline" onClick={() => setFormData({ ...formData, answers: [...answers, ''] })}
+          className="text-teal-600 border-teal-200 hover:bg-teal-50 font-bold mt-2 gap-2">
+          <Plus className="h-4 w-4" /> Thêm từ khóa
+        </Button>
+      </div>
+    );
+  }
+  // ===== ĐÚNG/SAI NHIỀU PHÁT BIỂU — sửa từng phát biểu + toggle đúng/sai =====
+  else if (formData.type === 'multitruefalse') {
+    const stmts = formData.statements || [];
+    dynamicBody = (
+      <div className="mt-6 border-t pt-6">
+        <label className="block text-xs font-bold text-slate-500 uppercase mb-3 tracking-widest">
+          Các Phát Biểu <span className="normal-case font-medium text-slate-400">— tối đa 4 phát biểu, chọn Đúng/Sai cho từng phát biểu</span>
+        </label>
+        {stmts.map((stmt, i) => (
+          <div key={i} className="flex gap-3 mb-3 items-center">
+            <span className="font-bold text-white bg-violet-500 w-8 h-8 flex items-center justify-center rounded-full flex-shrink-0 text-sm">{i + 1}</span>
+            <input
+              type="text"
+              className="flex-1 p-3 border-2 border-slate-200 bg-white rounded-xl outline-none focus:border-violet-500 font-semibold text-slate-700 shadow-sm"
+              placeholder={`Nội dung phát biểu ${i + 1}...`}
+              value={stmt.text}
+              onChange={(e) => {
+                const arr = stmts.map(s => ({ ...s })); arr[i].text = e.target.value;
+                setFormData({ ...formData, statements: arr });
+              }}
+            />
+            <div className="flex rounded-xl overflow-hidden border-2 border-slate-200 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => { const arr = stmts.map(s => ({ ...s })); arr[i].correct = true; setFormData({ ...formData, statements: arr }); }}
+                className={`px-4 py-2 font-bold text-sm transition ${stmt.correct ? 'bg-emerald-500 text-white' : 'bg-white text-slate-500 hover:bg-emerald-50'}`}
+              >Đúng</button>
+              <button
+                type="button"
+                onClick={() => { const arr = stmts.map(s => ({ ...s })); arr[i].correct = false; setFormData({ ...formData, statements: arr }); }}
+                className={`px-4 py-2 font-bold text-sm transition ${!stmt.correct ? 'bg-red-500 text-white' : 'bg-white text-slate-500 hover:bg-red-50'}`}
+              >Sai</button>
+            </div>
+            {stmts.length > 2 && (
+              <Button variant="outline" onClick={() => {
+                const arr = stmts.filter((_, idx) => idx !== i);
+                setFormData({ ...formData, statements: arr });
+              }} className="text-slate-400 hover:text-red-500 hover:bg-red-50 border-transparent hover:border-red-200 p-3 h-auto rounded-xl flex-shrink-0">
+                <Trash2 className="h-5 w-5" />
+              </Button>
+            )}
+          </div>
+        ))}
+        {stmts.length < 4 && (
+          <Button variant="outline" onClick={() => setFormData({ ...formData, statements: [...stmts, { text: '', correct: true }] })}
+            className="text-violet-600 border-violet-200 hover:bg-violet-50 font-bold mt-2 gap-2">
+            <Plus className="h-4 w-4" /> Thêm phát biểu
+          </Button>
+        )}
+      </div>
+    );
+  }
   else {
-    dynamicBody = <div className="mt-6 border-t pt-6 text-center text-amber-600 font-bold bg-amber-50 p-4 rounded-xl border border-amber-200">🚧 Vui lòng sử dụng tính năng xóa và tạo mới cho các dạng kéo thả.</div>;
+    dynamicBody = null;
   }
 
   return (
@@ -425,6 +594,20 @@ export default function QuestionModal({ isOpen, questionData, onSave, onClose })
               if (formData.pairs.some(p => !p.left.trim() && !p.right.trim())) return alert('⚠️ Mỗi dòng phải có ít nhất một trong hai vế (trái hoặc phải)! (Mã lỗi: QST-05)');
               if (formData.pairs.filter(p => p.right.trim()).length < 2) return alert('⚠️ Cần ít nhất 2 vế phải (đáp án) để học sinh có thể kéo thả! (Mã lỗi: QST-06)');
               if (formData.pairs.filter(p => p.left.trim()).length < 1) return alert('⚠️ Cần ít nhất 1 vế trái (câu hỏi) để ghép! (Mã lỗi: QST-07)');
+            }
+            if (formData.type === 'groupdrag') {
+              const gs = (formData.groups || []);
+              if (gs.length < 2) return alert('⚠️ Cần ít nhất 2 nhóm! (Mã lỗi: QST-08)');
+              if (gs.some(g => !(g.groupName ?? g.name ?? '').trim())) return alert('⚠️ Vui lòng nhập tên cho tất cả các nhóm! (Mã lỗi: QST-08b)');
+              if (gs.some(g => (g.items || []).length === 0)) return alert('⚠️ Mỗi nhóm cần có ít nhất 1 item! (Mã lỗi: QST-08c)');
+              // Normalize groupName vs name field
+              const normalized = gs.map(g => ({ groupName: (g.groupName ?? g.name ?? '').trim(), items: g.items }));
+              setFormData(prev => ({ ...prev, groups: normalized }));
+            }
+            if (formData.type === 'multitruefalse') {
+              const ss = (formData.statements || []).filter(s => s.text.trim());
+              if (ss.length < 2) return alert('⚠️ Cần ít nhất 2 phát biểu! (Mã lỗi: QST-12)');
+              if (ss.length > 4) return alert('⚠️ Tối đa 4 phát biểu! (Mã lỗi: QST-13)');
             }
             onSave(formData);
           }} className="px-8 font-black shadow-md gap-2"><Save className="h-5 w-5" /> Lưu Lại Thay Đổi</Button>

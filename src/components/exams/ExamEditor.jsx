@@ -3,7 +3,7 @@ import Taskbar from './Taskbar';
 import QuestionForms from './QuestionForms';
 import QuestionList from './QuestionList';
 import WordImportModal from './WordImportModal';
-import { FileText, Upload, Trash2, FileOutput } from 'lucide-react';
+import { FileText, Upload, Trash2, FileOutput, Sparkles } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { storageV2 } from '../../utils/storageV2';
 
@@ -108,9 +108,10 @@ export default function ExamEditor({ subject, examId, onBack, onSaveExam }) {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setIsWordImportOpen(true)}
-                    className="cursor-pointer flex items-center gap-2 bg-sky-50 border border-sky-200 text-sky-600 hover:bg-sky-500 hover:text-white font-bold py-1.5 px-3 rounded-lg transition text-sm"
+                    className="cursor-pointer flex items-center gap-2 font-bold py-1.5 px-4 rounded-xl transition text-sm text-white shadow-md"
+                    style={{ background: 'linear-gradient(135deg, #7c3aed, #c026d3)' }}
                   >
-                    <Upload className="h-4 w-4" /> NHẬP TỪ WORD (.docx)
+                    <Sparkles className="h-4 w-4" /> ✨ AI Nhận diện Đề thi
                   </button>
                   <button className="flex items-center gap-2 bg-slate-100 border border-slate-300 text-slate-400 font-bold py-1.5 px-3 rounded-lg text-sm cursor-not-allowed">
                     <FileOutput className="h-4 w-4" /> PDF (Bảo trì)

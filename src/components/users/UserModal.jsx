@@ -141,19 +141,23 @@ export default function UserModal({ isOpen, onClose, onSave, initialData }) {
             <label className="block text-slate-700 dark:text-slate-300 font-bold mb-2 text-sm uppercase tracking-wider">
               Vai trò (Chọn nhiều vai trò nếu cần)
             </label>
-            <div className="flex gap-4 p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-800">
-              {['Admin', 'Student'].map(role => {
-                const isChecked = formData.roles.includes(role);
+            <div className="flex flex-wrap gap-4 p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-800">
+              {[
+                { key: 'Admin', label: 'Quản trị viên (Admin)', color: 'text-purple-600 dark:text-purple-400' },
+                { key: 'Lecturer', label: 'Giảng viên (Lecturer)', color: 'text-amber-600 dark:text-amber-400' },
+                { key: 'Student', label: 'Học sinh (Student)', color: 'text-blue-600 dark:text-blue-400' },
+              ].map(({ key, label, color }) => {
+                const isChecked = formData.roles.includes(key);
                 return (
-                  <label key={role} className="flex items-center gap-2 cursor-pointer select-none">
+                  <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={isChecked}
-                      onChange={(e) => handleRoleChange(role, e.target.checked)}
+                      onChange={(e) => handleRoleChange(key, e.target.checked)}
                       className="w-4 h-4 text-primary rounded border-slate-300 focus:ring-primary"
                     />
-                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                      {role === 'Admin' ? 'Quản trị viên (Admin)' : 'Học sinh (Student)'}
+                    <span className={`text-sm font-semibold ${color}`}>
+                      {label}
                     </span>
                   </label>
                 );

@@ -15,11 +15,33 @@ export const saveGeminiApiKey = (key) => {
   }
 };
 
+// Models được thử theo thứ tự ưu tiên — mới nhất/mạnh nhất lên đầu
 const CANDIDATE_MODELS = [
-  'gemini-3.5-flash',
+  'gemini-3.6-flash',
   'gemini-2.5-flash',
+  'gemini-3.5-flash',
   'gemini-flash-latest'
 ];
+
+// Models hỗ trợ Vision (multimodal)
+const VISION_MODELS = [
+  'gemini-3.6-flash',
+  'gemini-2.5-flash',
+  'gemini-3.5-flash',
+  'gemini-flash-latest'
+];
+
+/**
+ * Tự động lọc Markdown JSON fence ``` json ... ``` mà AI đôi khi trả về,
+ * để đảm bảo JSON.parse không bị lỗi do wrapper không mong muốn.
+ */
+function cleanJsonResponse(text) {
+  if (!text) return text;
+  // Lọc ```json ... ``` hoặc ``` ... ```
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenceMatch) return fenceMatch[1].trim();
+  return text.trim();
+}
 
 const callGemini = async (prompt, systemInstruction = '', jsonMode = false, options = {}) => {
   const apiKey = getApiKey();
@@ -70,7 +92,8 @@ const callGemini = async (prompt, systemInstruction = '', jsonMode = false, opti
         const data = await response.json();
         const parts = data.candidates?.[0]?.content?.parts || [];
         const textParts = parts.filter(p => p.text !== undefined);
-        return textParts.length > 0 ? textParts[textParts.length - 1].text : '';
+        const rawText = textParts.length > 0 ? textParts[textParts.length - 1].text : '';
+        return jsonMode ? cleanJsonResponse(rawText) : rawText;
       }
 
       const errorData = await response.json().catch(() => ({}));
@@ -105,7 +128,7 @@ const callGeminiWithImages = async (prompt, images = [], systemInstruction = '',
   if (!apiKey) throw new Error('Chưa cấu hình API Key Gemini. (Mã lỗi: SYS-02)');
 
   // Chỉ model Vision hỗ trợ multimodal
-  const visionModels = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-flash-latest'];
+  const visionModels = VISION_MODELS;
 
   // Build parts: ảnh trước, text sau cùng
   const parts = [
@@ -136,7 +159,8 @@ const callGeminiWithImages = async (prompt, images = [], systemInstruction = '',
         const data = await response.json();
         const pts = data.candidates?.[0]?.content?.parts || [];
         const textPts = pts.filter(p => p.text !== undefined);
-        return textPts.length > 0 ? textPts[textPts.length - 1].text : '';
+        const rawText = textPts.length > 0 ? textPts[textPts.length - 1].text : '';
+        return jsonMode ? cleanJsonResponse(rawText) : rawText;
       }
       const errData = await response.json().catch(() => ({}));
       lastError = new Error(`Gemini Vision lỗi (${modelName}): ${errData.error?.message || response.status}`);
@@ -355,45 +379,59 @@ export const parseWordContentWithAI = async (rawText, imageMap = {}, onProgress 
   const systemInstruction = `Bạn là chuyên gia phân tích và bóc tách đề thi học thuật.
 Nhiệm vụ: Đọc văn bản đề thi và trả về mảng JSON các câu hỏi.
 ${hasImages ? `
-QUY TẮc XọX LÝ ẢNH:
+QUY TẮC XỬ LÝ ẢNH:
 - Trong văn bản có các placeholder [IMG_1], [IMG_2], [IMG_3]... tương ứng với các ảnh được gửi kèm theo thứ tự.
-- Khi đặt giá trị cho "question" hay "options", giữ nguyên placeholder [IMG_N] nếu ảnh đó là toàn bộ nội dung (thí dụ: phương án chỉ gồm 1 ảnh công thức).
-- Nếu ảnh là bảng dữ liậu trong đề bài, giữ [IMG_N] trong "question" kèm theo mô tả văn bản.
+- Khi đặt giá trị cho "question" hay "options", giữ nguyên placeholder [IMG_N] nếu ảnh đó là toàn bộ nội dung.
+- Nếu ảnh là bảng dữ liệu trong đề bài, giữ [IMG_N] trong "question" kèm theo mô tả văn bản.
 - Nếu phương án chỉ gồm ảnh (không có text), viết đúng [IMG_N] vào mảng options tại vị trí tương ứng.
 - Ví dụ: options: ["[IMG_2]", "[IMG_3]", "[IMG_4]", "[IMG_5]"] nếu cả 4 phương án đều là ảnh.
 ` : ''}
 
-HỆ THỐNG HỔ TRỢ ĐÚNG 9 DẠNG CÂU HịI - phân loại chính xác theo nội dung:
+=== NHẬN DẠNG FORMAT VĂN BẢN QUAN TRỌNG ===
+Văn bản có thể chứa định dạng đặc biệt:
+- **text** hoặc __text__ = văn bản IN ĐẬM trong file Word gốc → ĐÂY LÀ DẤU HIỆU ĐÁP ÁN ĐÚNG
+- Câu hỏi thường bắt đầu bằng "Câu N:" hoặc "Question N:" (bỏ số thứ tự khi điền vào field "question")
+- Phương án có thể là danh sách không có nhãn A/B/C/D (chỉ là các dòng/mục riêng lẻ)
+- Phương án có thể là danh sách có nhãn "1. 2. 3." hoặc "- item"
+
+HỆ THỐNG HỖ TRỢ ĐÚNG 9 DẠNG CÂU HỎI - phân loại chính xác theo nội dung:
 
 --- DẠNG 1: SINGLE (Trắc nghiệm chọn 1 đáp án đúng) ---
-Nhận dạng: Có các phương án A/B/C/D. Chỉ 1 đáp án đúng (in đậm, gạch chân, đánh dấu *, in đỏ, hoặc ghi "Answers: A").
-Cuấu trúc JSON:
+Nhận dạng: Có các phương án (có thể có hoặc không có nhãn A/B/C/D). Chỉ 1 đáp án đúng.
+DẤU HIỆU ĐÁP ÁN ĐÚNG trong văn bản LMS (không nhãn A/B/C):
+  - Phương án đúng được viết **in đậm** (dấu **)
+  - Ví dụ: "Phương án sai\n**Phương án đúng**\nPhương án sai" → correct: 1
+DẤU HIỆU ĐÁP ÁN ĐÚNG trong văn bản có nhãn A/B/C:
+  - In đậm, gạch chân, đánh dấu *, in đỏ, hoặc ghi "Answers: A"
+Cấu trúc JSON:
 {
   "type": "single",
-  "question": "Nội dung câu hỏi",
-  "options": ["Phương án A", "Phương án B", "Phương án C", "Phương án D"],
+  "question": "Nội dung câu hỏi (KHÔNG gồm 'Câu N:')",
+  "options": ["Phương án 1", "Phương án 2", "Phương án 3", "Phương án 4"],
   "correct": 0,
   "points": 1,
   "_needsReview": false
 }
 "correct": index 0-based của đáp án đúng. Đặt _needsReview: true nếu không xác định được.
+LƯU Ý: Khi options là danh sách "- item" hoặc "1. item", lấy phần text sau ký hiệu.
 
 --- DẠNG 2: MULTISELECT (Trắc nghiệm nhiều đáp án đúng) ---
-Nhận dạng: Nhiều đáp án đúng hoặc có cụm từ "chọn tất cả phương án đúng", "select all that apply".
-Cuấu trúc JSON:
+Nhận dạng: Có cụm "(Chọn N)", "(Chọn 2)", "(Chọn 3)", "select all that apply", hoặc nhiều phương án in đậm.
+DẤU HIỆU: Trong văn bản LMS, các phương án đúng đều được **in đậm**, phương án sai không in đậm.
+Cấu trúc JSON:
 {
   "type": "multiselect",
-  "question": "Nội dung câu hỏi",
-  "options": ["Phương án A", "Phương án B", "Phương án C"],
+  "question": "Nội dung câu hỏi (KHÔNG gồm 'Câu N:' hay '(Chọn 2)')",
+  "options": ["Phương án 1", "Phương án 2", "Phương án 3", "Phương án 4", "Phương án 5"],
   "corrects": [0, 2],
   "points": 1,
   "_needsReview": false
 }
-"corrects": mảng index (0-based) các đáp án đúng.
+"corrects": mảng index (0-based) các đáp án đúng (phương án được in đậm **).
 
 --- DẠNG 3: FILL (Điền vào chỗ trống) ---
 Nhận dạng: Có chỗ trống ___ hoặc ...... trong câu, hoặc có dòng "Đáp án:" kèm 1 từ/cụm từ, không có các phương án A/B/C.
-Cuấu trúc JSON:
+Cấu trúc JSON:
 {
   "type": "fill",
   "question": "Nội dung câu hỏi có ___",
@@ -403,9 +441,10 @@ Cuấu trúc JSON:
 }
 Đảm bảo "question" chứa ___ để đánh dấu chỗ trống.
 
---- DẠNG 4: TRUEFALSE (Đúng / Sai) ---
-Nhận dạng: Câu hỏi có 2 lựa chọn True/False hoặc Đúng/Sai, hoặc là mệnh đề phát biểu để xác nhận đúng/sai.
-Cuấu trúc JSON:
+--- DẠNG 4: TRUEFALSE (Đúng / Sai — 1 phát biểu) ---
+Nhận dạng: Câu hỏi chỉ có 2 lựa chọn True/False hoặc Đúng/Sai cho 1 mệnh đề duy nhất.
+KHÔNG dùng dạng này khi có nhiều phát biểu con (→ dùng DẠNG 9 MULTITRUEFALSE).
+Cấu trúc JSON:
 {
   "type": "truefalse",
   "question": "Mệnh đề cần xác nhận",
@@ -413,52 +452,92 @@ Cuấu trúc JSON:
   "points": 1,
   "_needsReview": false
 }
-"correct": true nếu đúng, false nếu sai (kiểu boolean).
 
 --- DẠNG 5: DRAG (Ghép cặp 1-1) ---
-Nhận dạng: Bảng 2 cột, MỘI HÀNG là 1 cặp riêng biệt — vế TRÁI ghép với vế PHẢI của CÙNG HÀNG đó.
-Mỗi item vế trái chỉ tương ứng đúng 1 item vế phải (quan hệ 1-1).
-Ví dụ trong file Word:
-  | LẦN MƯỢN    | Thực thể trung gian |
-  | SỐ ĐT       | Thuộc tính đa trị   |
-  | MÃ ĐG       | Khóa chính          |
-  | HẠN_TRẢ     | Thuộc tính liên kết |
-→ Đây là DRAG vì mỗi hàng = 1 cặp riêng lẻ (LẦN MƯỢN ghép với Thực thể trung gian, v.v.)
+Nhận dạng: Bảng 2 cột, MỖI HÀNG là 1 cặp riêng biệt — vế TRÁI ghép với vế PHẢI của CÙNG HÀNG đó.
 Cấu trúc JSON:
 {
   "type": "drag",
   "question": "Kéo thả đúng các thành phần vào loại tương ứng",
   "pairs": [
     { "left": "LẦN MƯỢN",    "right": "Thực thể trung gian" },
-    { "left": "SỐ ĐIỆN THOẠI","right": "Thuộc tính đa trị" },
-    { "left": "MÃ ĐG",        "right": "Khóa chính" },
-    { "left": "HẠN_TRẢ",      "right": "Thuộc tính của liên kết" }
+    { "left": "SỐ ĐIỆN THOẠI","right": "Thuộc tính đa trị" }
   ],
   "points": 1
 }
 
---- DẠNG 6: GROUPDRAG (Phân loại nhóm) ---
-Nhận dạng: Yêu cầu kéo/phân loại các từ/mục vào 2 hoặc nhiều NHÓM/CỘT.
-Ví dụ: "Phân loại các thiết bị sau vào Input/Output: Chuột, Bàn phím, Màn hình, Loa"
-Cấu trúc JSON:
+--- DẠNG 5b: DRAG (Ghép cặp 1-1 với tên slot) — nhận dạng đặc biệt ---
+Nếu câu có "(Chú ý: chỉ kéo 1 đối tượng vào 1 ô)" hoặc mỗi nhóm chỉ nhận ĐÚNG 1 item:
+→ Dùng DRAG thay vì GROUPDRAG.
+Ví dụ LMS thực tế:
+  "Câu 11: ... kéo thả ĐÚNG đối tượng... (Chú ý: chỉ kéo 1 đối tượng vào 1 ô)
+   Các đối tượng: Xung quang học, Sóng điện từ, Xung điện
+   1) Môi trường sử dụng Cáp xoắn
+   **Xung điện**
+   2) Môi trường Không khí
+   **Sóng điện từ**"
+→ 3 đối tượng, 3 slot (hoặc 2 slot + 1 đối tượng có thể bị ẩn) — dùng DRAG:
+{
+  "type": "drag",
+  "question": "Phân loại tín hiệu vật lý vào môi trường truyền dẫn tương ứng",
+  "pairs": [
+    { "left": "Môi trường sử dụng Cáp xoắn", "right": "Xung điện" },
+    { "left": "Môi trường Không khí", "right": "Sóng điện từ" },
+    { "left": "Môi trường sử dụng Cáp quang", "right": "Xung quang học" }
+  ],
+  "points": 1
+}
+(Nếu chỉ thấy được 2 cặp, tạo đủ các cặp từ danh sách đối tượng còn lại)
+
+--- DẠNG 6: GROUPDRAG (Phân loại nhóm — mỗi nhóm có NHIỀU items) ---
+Nhận dạng: Yêu cầu phân loại nhiều từ/mục vào 2+ NHÓM, mỗi nhóm nhận NHIỀU HƠN 1 item.
+FORMAT LMS ĐẶC BIỆT — 3 dạng thực tế hay gặp:
+
+[DẠNG A] Đáp án in đậm (**) sau tên nhóm, phân cách bằng dấu phẩy:
+  "1) Có định hướng (có dây)
+   **Cáp quang, Cáp xoắn, Cáp đồng trục**
+   2) Không định hướng (không dây)
+   **Sóng mạng 5G, Sóng mạng Wifi**"
+→ Split theo dấu phẩy: items = ["Cáp quang", "Cáp xoắn", "Cáp đồng trục"]
+
+[DẠNG B] Đáp án in đậm (**) sau tên nhóm, phân cách bằng dấu chấm phẩy (;):
+  "Các đặc điểm: A; B; C
+   1) Nhóm X
+   **AB**        ← 2 items A và B dính nhau, xem trong "Các đặc điểm" để tách
+   2) Nhóm Y
+   **C**"
+→ Dùng danh sách "Các đối tượng:" / "Các đặc điểm:" để biết đúng tên item và tách chính xác.
+→ Mỗi item phải khớp CHÍNH XÁC với 1 mục trong danh sách "Các đối tượng/đặc điểm".
+
+[DẠNG C] Mỗi item nằm trên dòng riêng (không dính nhau):
+  "1) Nhóm X
+   **Item A**
+   **Item B**
+   2) Nhóm Y
+   **Item C**"
+→ items = ["Item A", "Item B"]
+
+QUY TẮC QUAN TRỌNG CHO GROUPDRAG:
+- LUÔN đối chiếu với danh sách "Các đối tượng:" hoặc "Các đặc điểm:" để xác định tên chính xác từng item.
+- Khi đáp án in đậm bị DÍNH NHAU (không có dấu phân cách), tách theo danh sách gốc.
+- Ví dụ: "Các đặc điểm: Truyền tín hiệu bằng ánh sáng; Khoảng cách truyền xa, chống nhiễu tốt; Dễ thi công..."
+  → 3 items: ["Truyền tín hiệu bằng ánh sáng", "Khoảng cách truyền xa, chống nhiễu tốt", "Dễ thi công, giá rẻ, phổ biến trong mạng LAN"]
+  → Bold đáp án nhóm 1 dính "Truyền tín hiệu bằng ánh sángKhoảng cách truyền xa, chống nhiễu tốt"
+  → Tách thành 2 items khớp danh sách: "Truyền tín hiệu bằng ánh sáng" + "Khoảng cách truyền xa, chống nhiễu tốt"
+
+Cấu trúc JSON mẫu thực tế (file mạng máy tính Câu 12 & 13):
 {
   "type": "groupdrag",
-  "question": "Phân loại thiết bị Input và Output",
+  "question": "Kéo thả đối tượng vào đúng nhóm môi trường truyền dẫn",
   "groups": [
-    {
-      "groupName": "Input",
-      "items": ["Chuột", "Bàn phím"]
-    },
-    {
-      "groupName": "Output",
-      "items": ["Màn hình", "Loa"]
-    }
+    { "groupName": "Có định hướng (có dây)", "items": ["Cáp quang", "Cáp xoắn", "Cáp đồng trục"] },
+    { "groupName": "Không định hướng (không dây)", "items": ["Sóng mạng 5G", "Sóng mạng Wifi"] }
   ],
   "points": 1
 }
 
 --- DẠNG 7: CLOZEDRAG (Kéo vào đoạn văn) ---
-Nhận dạng: Có 1 đoạn văn chứa nhiều chỗ trống (VD: "Mặt trời mọc ở hướng [1] và lặn ở hướng [2]") và 1 danh sách các từ để kéo vào chỗ trống.
+Nhận dạng: Đoạn văn chứa nhiều chỗ trống [1][2][3] và danh sách từ để kéo vào.
 Cấu trúc JSON:
 {
   "type": "clozedrag",
@@ -466,9 +545,10 @@ Cấu trúc JSON:
   "answers": ["Đông", "Tây"],
   "points": 1
 }
+
 --- DẠNG 8: ORDER (Sắp xếp thứ tự) ---
 Nhận dạng: Yêu cầu sắp xếp các bước/mục theo thứ tự đúng.
-Cuấu trúc JSON:
+Cấu trúc JSON:
 {
   "type": "order",
   "question": "Sắp xếp các bước",
@@ -478,23 +558,33 @@ Cuấu trúc JSON:
 }
 
 --- DẠNG 9: MULTITRUEFALSE (Đúng/Sai nhiều phát biểu) ---
-Nhận dạng: 1 câu hỏi gốc kèm tối đa 4 phát biểu con, mỗi phát biểu cần xác nhận Đúng hoặc Sai riêng lẻ.
-Nhận dạng: Có danh sách 1)/2)/3)/4) kèm "Đúng"/"Sai" bên cạnh, hoặc có cụm "đúng hay sai", "xem các phát biểu".
-Cuấu trúc JSON:
+Nhận dạng: 1 câu hỏi gốc kèm nhiều phát biểu con, mỗi phát biểu cần xác nhận Đúng hoặc Sai riêng lẻ.
+FORMAT LMS ĐẶC BIỆT: Mỗi phát biểu có dạng:
+  "Phát biểu...\nĐúng\n**Sai**" → correct: false (Sai in đậm)
+  "Phát biểu...\n**Đúng**\nSai" → correct: true (Đúng in đậm)
+  "Phát biểu...\nSai\n**Đúng**" → correct: true (Đúng in đậm)
+RULE: Từ nào (**Đúng** hay **Sai**) được in đậm = đó là đáp án đúng của phát biểu đó.
+Cấu trúc JSON:
 {
   "type": "multitruefalse",
-  "question": "Câu hỏi gốc",
+  "question": "Câu hỏi gốc (KHÔNG kèm các phát biểu con)",
   "statements": [
     { "text": "Phát biểu 1", "correct": true },
-    { "text": "Phát biểu 2", "correct": false }
+    { "text": "Phát biểu 2", "correct": false },
+    { "text": "Phát biểu 3", "correct": true },
+    { "text": "Phát biểu 4", "correct": false }
   ],
   "points": 1
 }
+Tối đa 4 phát biểu. Mỗi phát biểu: text = nội dung phát biểu (không có "Đúng/Sai"), correct = boolean.
 
-QUY TẮc CHUNG:
-- Trả về DUY NHẤT mảng JSON hợp lệ, không gải thích ngoài.
+QUY TẮC CHUNG:
+- Trả về DUY NHẤT mảng JSON hợp lệ, không giải thích ngoài.
 - Bỏ qua tiêu đề, hướng dẫn chung, chỉ lấy câu hỏi.
-- Giữ nguyên ngôn ngữ gốc (Tiếng Việt/Anh) của văn bản.`;
+- Giữ nguyên ngôn ngữ gốc (Tiếng Việt/Anh) của văn bản.
+- KHÔNG đưa "Câu N:", "Câu 1:", "Question 1:" vào field "question".
+- Nếu không xác định được đáp án đúng, đặt _needsReview: true.`;
+
 
   function splitIntoChunks(text) {
     const lines = text.split('\n');
@@ -736,6 +826,234 @@ QUY TẮc CHUNG:
   return allQuestions;
 };
 
+
+
+// ─────────────────────────────────────────────────────────────
+// AI VISION — Bóc tách đề thi từ ảnh chụp / scan
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * parseExamFromImagesWithAI — Dùng Gemini Vision để OCR và bóc tách câu hỏi,
+ * phương án và đáp án từ ảnh chụp / scan đề thi.
+ *
+ * @param {Array<{mimeType: string, data: string}>} images - Mảng ảnh base64 {mimeType, data}
+ * @param {function} [onProgress] - Callback(done, total)
+ * @returns {Promise<Array>} Danh sách câu hỏi đã chuẩn hóa (cùng format với parseWordContentWithAI)
+ */
+export const parseExamFromImagesWithAI = async (images = [], onProgress = null) => {
+  if (images.length === 0) return [];
+
+  const systemInstruction = `Bạn là chuyên gia OCR và phân tích đề thi học thuật. Nhiệm vụ: Đọc ảnh chụp/scan đề thi và trả về mảng JSON các câu hỏi.
+
+HỆ THỐNG HỖ TRỢ ĐÚNG 9 DẠNG CÂU HỎI - phân loại chính xác theo nội dung:
+
+--- DẠNG 1: SINGLE (Trắc nghiệm chọn 1 đáp án đúng) ---
+Nhận dạng: Có các phương án A/B/C/D. Chỉ 1 đáp án đúng (thường được đánh dấu *, in đậm, gạch chân, hoặc ghi "Đáp án: A").
+Cấu trúc JSON:
+{
+  "type": "single",
+  "question": "Nội dung câu hỏi",
+  "options": ["Phương án A", "Phương án B", "Phương án C", "Phương án D"],
+  "correct": 0,
+  "points": 1,
+  "_needsReview": false
+}
+"correct": index 0-based của đáp án đúng. Đặt _needsReview: true nếu không xác định được.
+
+--- DẠNG 2: MULTISELECT (Trắc nghiệm nhiều đáp án đúng) ---
+Nhận dạng: Nhiều đáp án đúng hoặc có cụm từ "chọn tất cả phương án đúng", "select all that apply".
+Cấu trúc JSON:
+{
+  "type": "multiselect",
+  "question": "Nội dung câu hỏi",
+  "options": ["Phương án A", "Phương án B", "Phương án C"],
+  "corrects": [0, 2],
+  "points": 1,
+  "_needsReview": false
+}
+
+--- DẠNG 3: FILL (Điền vào chỗ trống) ---
+Nhận dạng: Có chỗ trống ___ hoặc ...... trong câu, không có phương án A/B/C.
+Cấu trúc JSON:
+{
+  "type": "fill",
+  "question": "Nội dung câu hỏi có ___",
+  "answer": "Đáp án đúng",
+  "points": 1,
+  "_needsReview": false
+}
+
+--- DẠNG 4: TRUEFALSE (Đúng / Sai) ---
+Nhận dạng: Câu hỏi có 2 lựa chọn True/False hoặc Đúng/Sai, hoặc mệnh đề phát biểu.
+Cấu trúc JSON:
+{
+  "type": "truefalse",
+  "question": "Mệnh đề cần xác nhận",
+  "correct": true,
+  "points": 1,
+  "_needsReview": false
+}
+
+--- DẠNG 5: DRAG (Ghép cặp 1-1) ---
+Nhận dạng: Bảng 2 cột, mỗi hàng là 1 cặp riêng biệt.
+Cấu trúc JSON:
+{
+  "type": "drag",
+  "question": "Ghép các cặp đúng",
+  "pairs": [
+    { "left": "Khái niệm A", "right": "Định nghĩa A" }
+  ],
+  "points": 1
+}
+
+--- DẠNG 6: GROUPDRAG (Phân loại nhóm — mỗi nhóm có NHIỀU items) ---
+Nhận dạng: Yêu cầu phân loại nhiều mục vào 2+ nhóm, mỗi nhóm nhận nhiều hơn 1 item.
+Phân biệt với DRAG (1-1): Nếu mỗi slot chỉ nhận 1 item → dùng DRAG.
+QUY TẮC QUAN TRỌNG:
+- Trong ảnh chụp đề thi, nhóm thường được trình bày dạng bảng hoặc khung có tiêu đề.
+- Xác định tên nhóm từ tiêu đề hàng/cột, các item là nội dung bên trong ô đó.
+- Nếu có danh sách "Các đối tượng:" / "Các đặc điểm:", dùng đó để tách item bị dính nhau.
+Cấu trúc JSON:
+{
+  "type": "groupdrag",
+  "question": "Phân loại các mục vào nhóm phù hợp",
+  "groups": [
+    { "groupName": "Nhóm A", "items": ["Mục 1", "Mục 2"] },
+    { "groupName": "Nhóm B", "items": ["Mục 3", "Mục 4"] }
+  ],
+  "points": 1
+}
+
+--- DẠNG 7: CLOZEDRAG (Kéo vào đoạn văn) ---
+Nhận dạng: Đoạn văn có nhiều chỗ trống [1][2][3] và danh sách từ để điền.
+Cấu trúc JSON:
+{
+  "type": "clozedrag",
+  "question": "Đoạn văn với [1] và [2]",
+  "answers": ["Từ 1", "Từ 2"],
+  "points": 1
+}
+
+--- DẠNG 8: ORDER (Sắp xếp thứ tự) ---
+Nhận dạng: Yêu cầu sắp xếp các bước/mục theo thứ tự đúng.
+Cấu trúc JSON:
+{
+  "type": "order",
+  "question": "Sắp xếp các bước",
+  "items": ["Bước 1", "Bước 2", "Bước 3"],
+  "correctOrder": [0, 1, 2],
+  "points": 1
+}
+
+--- DẠNG 9: MULTITRUEFALSE (Đúng/Sai nhiều phát biểu) ---
+Nhận dạng: 1 câu hỏi gốc kèm tối đa 4 phát biểu con.
+Cấu trúc JSON:
+{
+  "type": "multitruefalse",
+  "question": "Câu hỏi gốc",
+  "statements": [
+    { "text": "Phát biểu 1", "correct": true },
+    { "text": "Phát biểu 2", "correct": false }
+  ],
+  "points": 1
+}
+
+QUY TẮC QUAN TRỌNG KHI ĐỌC ẢNH:
+- Nhận diện chính xác nội dung từ ảnh, kể cả nếu ảnh bị nghiêng hoặc hơi mờ.
+- Nếu ảnh chứa công thức toán học, phiên âm sang LaTeX (ví dụ: $x^2 + y^2 = z^2$).
+- Bỏ qua số thứ tự câu ("Câu 1:", "Question 1:") khi điền vào field "question".
+- Trả về DUY NHẤT mảng JSON hợp lệ, không giải thích ngoài.
+- Giữ nguyên ngôn ngữ gốc (Tiếng Việt/Anh) của đề thi.`;
+
+  function parseAIJsonArray(text) {
+    try { const p = JSON.parse(text); return Array.isArray(p) ? p : []; } catch { /* fall through */ }
+    try { const m = text.match(/\[[\s\S]*\]/); if (m) return JSON.parse(m[0]); } catch { /* ignore */ }
+    return [];
+  }
+
+  // Chuẩn hóa câu hỏi nhận được từ AI Vision (không có imageSequence/localMap)
+  function normalizeVisionQuestion(q) {
+    const type = q.type || 'single';
+    const points = Number(q.points) || 1;
+    const base = { type, question: String(q.question || '').trim(), image: '', points };
+    if (type === 'single') {
+      const options = Array.isArray(q.options) ? q.options.map(o => String(o).trim()) : [];
+      let correct = typeof q.correct === 'number' ? q.correct : 0;
+      const needsReview = !!q._needsReview || options.length < 2;
+      if (correct < 0 || correct >= options.length) { correct = 0; }
+      return { ...base, options, optionImages: options.map(() => ''), correct, _needsReview: needsReview };
+    }
+    if (type === 'multiselect') {
+      const options = Array.isArray(q.options) ? q.options.map(o => String(o).trim()) : [];
+      const corrects = Array.isArray(q.corrects) ? q.corrects.filter(Number.isInteger) : [];
+      return { ...base, options, optionImages: options.map(() => ''), corrects, _needsReview: corrects.length === 0 };
+    }
+    if (type === 'fill') {
+      const answer = String(q.answer || '').trim();
+      let question = base.question;
+      if (!question.includes('___')) question += ' ___';
+      return { ...base, question, answer, answers: answer ? [answer] : [], _needsReview: !answer };
+    }
+    if (type === 'truefalse') {
+      let correct;
+      if (typeof q.correct === 'boolean') correct = q.correct;
+      else if (typeof q.correct === 'string') correct = /^(true|đúng|yes|1)$/i.test(q.correct.trim());
+      else correct = true;
+      const needsReview = q.correct === null || q.correct === undefined || !!q._needsReview;
+      return { ...base, correct, _needsReview: needsReview };
+    }
+    if (type === 'drag') {
+      const pairs = Array.isArray(q.pairs)
+        ? q.pairs.filter(p => p.left || p.right).map(p => ({ left: String(p.left || '').trim(), right: String(p.right || '').trim() }))
+        : [];
+      return { ...base, pairs, _needsReview: pairs.length < 2 };
+    }
+    if (type === 'groupdrag') {
+      const groups = Array.isArray(q.groups)
+        ? q.groups.map(g => ({ name: String(g.groupName || g.name || '').trim(), items: Array.isArray(g.items) ? g.items.map(i => String(i).trim()).filter(Boolean) : [] })).filter(g => g.name)
+        : [];
+      return { ...base, groups, _needsReview: groups.length < 2 };
+    }
+    if (type === 'clozedrag') {
+      const answers = Array.isArray(q.answers) ? q.answers.map(a => String(a).trim()) : [];
+      let question = base.question;
+      if ((question.match(/___/g) || []).length === 0 && answers.length > 0) question += ' ' + answers.map(() => '___').join(' ');
+      return { ...base, question, answers, _needsReview: answers.length === 0 };
+    }
+    if (type === 'order') {
+      const items = Array.isArray(q.items) ? q.items.map(i => String(i).trim()).filter(Boolean) : [];
+      return { ...base, items, _needsReview: items.length < 2 };
+    }
+    if (type === 'multitruefalse') {
+      const statements = Array.isArray(q.statements)
+        ? q.statements.filter(s => s && s.text).slice(0, 4).map(s => ({
+            text: String(s.text || '').trim(),
+            correct: typeof s.correct === 'boolean' ? s.correct : /^(true|đúng|yes|1)$/i.test(String(s.correct || '').trim())
+          }))
+        : [];
+      return { ...base, statements, _needsReview: statements.length === 0 };
+    }
+    // Fallback
+    return { ...base, type: 'single', options: [], optionImages: [], correct: 0, _needsReview: true };
+  }
+
+  // Xử lý từng ảnh riêng lẻ (mỗi ảnh = 1 trang đề thi)
+  const allQuestions = [];
+  for (let i = 0; i < images.length; i++) {
+    if (onProgress) onProgress(i, images.length);
+    const img = images[i];
+    const prompt = `Đây là ảnh trang ${i + 1}/${images.length} của đề thi. Hãy đọc toàn bộ nội dung trong ảnh, nhận diện và bóc tách tất cả câu hỏi, phương án, đáp án theo đúng định dạng JSON đã quy định. Trả về mảng JSON.`;
+    try {
+      const responseText = await callGeminiWithImages(prompt, [img], systemInstruction, true, { maxOutputTokens: 8192, temperature: 0.1 });
+      parseAIJsonArray(responseText).forEach(q => allQuestions.push(normalizeVisionQuestion(q)));
+    } catch (err) {
+      console.error(`[parseExamFromImagesWithAI] Ảnh ${i + 1} lỗi:`, err);
+      throw err;
+    }
+  }
+  if (onProgress) onProgress(images.length, images.length);
+  return allQuestions;
+};
 
 
 /**

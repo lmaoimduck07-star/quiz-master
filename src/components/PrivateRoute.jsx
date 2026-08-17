@@ -30,9 +30,9 @@ export default function PrivateRoute({ children, allowedRoles, requiredPermissio
     try {
       sessionStorage.setItem('qm_auth_notice', '🚫 Bạn không có quyền truy cập vào trang này.');
     } catch (e) {}
-    return activeRole === 'Admin' 
-      ? <Navigate to="/admin/dashboard" replace /> 
-      : <Navigate to="/client/dashboard" replace />;
+    if (activeRole === 'Admin') return <Navigate to="/admin/dashboard" replace />;
+    if (activeRole === 'Lecturer') return <Navigate to="/lecturer/dashboard" replace />;
+    return <Navigate to="/client/dashboard" replace />;
   }
 
   // 4. Kiểm tra permission tính năng (nếu có yêu cầu)
@@ -51,9 +51,10 @@ export default function PrivateRoute({ children, allowedRoles, requiredPermissio
 
 function AccessDeniedPage({ requiredPermission }) {
   const navigate = useNavigate();
-  const permLabel = requiredPermission === 'codingAccess' 
-    ? 'Thi Lập trình & Vấn đáp AI' 
-    : requiredPermission;
+  const permLabel = 
+    requiredPermission === 'codingAccess' ? 'Thi Lập trình & Vấn đáp AI' :
+    requiredPermission === 'lecturerAccess' ? 'Phân hệ Giảng viên' :
+    requiredPermission;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4 transition-colors">

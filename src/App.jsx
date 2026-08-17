@@ -12,6 +12,7 @@ const Register = lazy(() => import("./pages/Register"));
 const ClientDashboard = lazy(() => import("./pages/ClientDashboardWrapper"));
 const MockExam = lazy(() => import("./pages/MockExamWrapper"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboardWrapper"));
+const LecturerDashboard = lazy(() => import("./pages/LecturerDashboardWrapper"));
 const CodingWorkspace = lazy(() => import("./pages/coding/CodingWorkspaceWrapper"));
 // ─── Desktop-only pages (không cần Wrapper) ──────────────────────────────
 const PracticeReview = lazy(() => import("./pages/PracticeReview"));
@@ -72,11 +73,11 @@ function App() {
                 </PrivateRoute>
               } 
             />
-            {/* Admin Spectator Route — Xem trực tiếp bài làm của học sinh (Read-Only) */}
+            {/* Admin Spectator Route — Xem trực tiếp bài làm của học sinh (Read-Only) — Admin & Giảng viên */}
             <Route 
               path="/admin/spectate/:sessionId" 
               element={
-                <PrivateRoute allowedRoles={['Admin']}>
+                <PrivateRoute allowedRoles={['Admin', 'Lecturer']}>
                   <SpectatorView />
                 </PrivateRoute>
               } 
@@ -86,6 +87,14 @@ function App() {
               element={
                 <PrivateRoute allowedRoles={['Admin']}>
                   <AdminDashboard />
+                </PrivateRoute>
+              } 
+            />
+            <Route 
+              path="/lecturer/dashboard" 
+              element={
+                <PrivateRoute allowedRoles={['Lecturer', 'Admin']}>
+                  <LecturerDashboard />
                 </PrivateRoute>
               } 
             />

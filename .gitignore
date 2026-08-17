@@ -31,3 +31,9 @@ dist-ssr
 .vercel
 .firebase
 
+# Scratch and test files
+test_*.cjs
+*.old.js
+gemini_old*.js
+convert.cjs
+restore_instruction*.cjs

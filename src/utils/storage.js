@@ -10,6 +10,15 @@ import {
   serverTimestamp, onSnapshot
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
+// ── Import Atomic User Service (Chống Race Condition) ───────────────────────
+import {
+  createUser as atomicCreateUser,
+  updateUser as atomicUpdateUser,
+  deleteUser as atomicDeleteUser,
+  setUserStatus as atomicSetUserStatus,
+} from '../services/db/userService';
+// ── Import Cleanup Service ────────────────────────────────────────────────
+import { runDatabaseCleanup } from '../services/db/cleanupService';
 
 // ─────────────────────────────────────────────
 // DỮ LIỆU MẶC ĐỊNH (seed khi Firestore trống)
@@ -870,6 +879,7 @@ async function removeActiveSession(sessionId) {
 // EXPORT — giữ nguyên interface cũ để không phá vỡ code hiện có
 // ─────────────────────────────────────────────
 export const storage = {
+  // Legacy (backward compat)
   loadUsers,
   saveUsers,
   loadSubjects,
@@ -899,4 +909,11 @@ export const storage = {
   deleteActiveSessionRemotely,
   sendAdminAlertToStudent,
   removeActiveSession,
+  // ── Atomic CRUD (An toàn, chống Race Condition) ───────────────────
+  createUser: atomicCreateUser,
+  updateUser: atomicUpdateUser,
+  deleteUser: atomicDeleteUser,
+  setUserStatus: atomicSetUserStatus,
+  // ── Database Cleanup Tool ───────────────────────────────────────
+  runDatabaseCleanup,
 };

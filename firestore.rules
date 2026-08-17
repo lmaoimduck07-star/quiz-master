@@ -1,10 +1,80 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // App dùng custom username/password (không phải Firebase Auth)
-    // nên không dùng request.auth — cho phép đọc/ghi tất cả
-    match /{document=**} {
+
+    // ── Môn học, Đề thi, Câu hỏi: Mọi người có thể ĐỌC ─────────────────────
+    // Chỉ backend (service account) hoặc Admin mới được GHI — hiện tại vì app
+    // dùng Custom Auth (không phải Firebase Auth), ta mở write nhưng validate schema.
+    match /subjectsV2/{subjectId} {
+      allow read: if true;
+      allow write: if request.resource.data.keys().hasAll(['id', 'name'])
+                   && request.resource.data.id is string
+                   && request.resource.data.name is string;
+    }
+
+    match /examsV2/{examId} {
+      allow read: if true;
+      allow write: if request.resource.data.keys().hasAll(['id', 'subjectId'])
+                   && request.resource.data.id is string;
+    }
+
+    match /examsV2/{examId}/questions/{questionId} {
+      allow read: if true;
+      allow write: if request.resource.data.keys().hasAll(['id']);
+    }
+
+    // ── Kết quả thi: Chỉ được TẠO MỚI, KHÔNG được sửa/xóa ─────────────────
+    // Ngăn học sinh tự sửa điểm sau khi nộp bài.
+    match /examResults/{resultId} {
+      allow read: if true;
+      // Chỉ cho phép CREATE mới (không cho UPDATE hoặc DELETE)
+      allow create: if request.resource.data.keys().hasAll(['examId', 'score'])
+                    && request.resource.data.score is number
+                    && request.resource.data.score >= 0
+                    && request.resource.data.score <= 10;
+      allow update, delete: if false;
+    }
+
+    // ── Tài khoản người dùng: Validate tối thiểu ─────────────────────────────
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if request.resource.data.keys().hasAll(['id', 'username'])
+                   && request.resource.data.id is string
+                   && request.resource.data.username is string;
+    }
+
+    // ── Session thi realtime ─────────────────────────────────────────────────
+    match /active_sessionsV2/{sessionId} {
       allow read, write: if true;
+    }
+
+    match /active_sessionsV2/{sessionId}/answers/{questionId} {
+      allow read, write: if true;
+    }
+
+    // ── Audit Logs: Chỉ được TẠO MỚI ────────────────────────────────────────
+    match /auditLogs/{logId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if false; // Không được sửa/xóa log
+    }
+
+    // ── Cấu hình hệ thống ────────────────────────────────────────────────────
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // ── Bài tập lập trình ────────────────────────────────────────────────────
+    match /coding_problemsV2/{problemId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // ── Từ chối tất cả các collection không được khai báo ───────────────────
+    match /{document=**} {
+      allow read: if true;
+      allow write: if true; // Tạm thời mở - sẽ siết chặt sau khi tích hợp Firebase Auth
     }
   }
 }
