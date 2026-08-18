@@ -20,6 +20,8 @@ const CodingDashboard = lazy(() => import("./pages/coding/CodingDashboard"));
 const CodingViva = lazy(() => import("./pages/coding/CodingViva"));
 const CodingReview = lazy(() => import("./pages/coding/CodingReview"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const InstantPractice = lazy(() => import("./pages/practice/InstantPractice"));
+const MistakePractice = lazy(() => import("./pages/practice/MistakePractice"));
 
 function PageLoader() {
   return (
@@ -55,6 +57,23 @@ function App() {
                   <PracticeReview />
                 </PrivateRoute>
               } 
+            />
+            {/* Practice Mode Routes */}
+            <Route
+              path="/client/practice/instant/:sessionId"
+              element={
+                <PrivateRoute allowedRoles={['Student', 'Admin']}>
+                  <InstantPractice />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/client/practice/mistakes/:subjectId"
+              element={
+                <PrivateRoute allowedRoles={['Student', 'Admin']}>
+                  <MistakePractice />
+                </PrivateRoute>
+              }
             />
             <Route 
               path="/client/exam" 

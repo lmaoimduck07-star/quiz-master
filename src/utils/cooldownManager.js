@@ -14,13 +14,70 @@ const COOLDOWN_MS = 10 * 60 * 1000; // 10 phút (600.000 ms)
  */
 export function isUserUnlimited(user) {
   if (!user) return false;
+
+  // 1. Kiểm tra mảng roles: user.roles = ['Admin', 'Student', ...]
+  const rolesArray = Array.isArray(user.roles) ? user.roles : [];
+  const hasAdminRole = rolesArray.some(r => {
+    const s = String(r || '').toLowerCase();
+    return s === 'admin' || s === 'unlimited';
+  });
+  if (hasAdminRole) {
+    _clearUserCooldownIfExempt(user.id);
+    return true;
+  }
+
+  // 2. Kiểm tra chuỗi role đơn
   const roleStr = String(user.role || '').toLowerCase();
-  return (
-    roleStr === 'admin' ||
-    roleStr === 'unlimited' ||
+  if (roleStr === 'admin' || roleStr === 'unlimited') {
+    _clearUserCooldownIfExempt(user.id);
+    return true;
+  }
+
+  // 3. Kiểm tra activeRole trong localStorage
+  try {
+    const activeRole = String(localStorage.getItem('qm_active_role') || '').toLowerCase();
+    if (activeRole === 'admin') {
+      _clearUserCooldownIfExempt(user.id);
+      return true;
+    }
+  } catch (_) {}
+
+  // 4. Kiểm tra flag isUnlimited / unlimited (boolean, string, number)
+  if (
     user.isUnlimited === true ||
-    user.permission === 'unlimited'
-  );
+    user.isUnlimited === 'true' ||
+    user.isUnlimited === 1 ||
+    user.unlimited === true ||
+    user.unlimited === 'true' ||
+    user.unlimited === 1
+  ) {
+    _clearUserCooldownIfExempt(user.id);
+    return true;
+  }
+
+  // 5. Kiểm tra trong permissions object
+  if (
+    user.permission === 'unlimited' ||
+    user.permissions?.unlimited === true ||
+    user.permissions?.unlimited === 'true' ||
+    user.permissions?.isUnlimited === true ||
+    user.permissions?.isUnlimited === 'true'
+  ) {
+    _clearUserCooldownIfExempt(user.id);
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Xóa cache cooldown trong LocalStorage nếu user là Unlimited
+ */
+function _clearUserCooldownIfExempt(userId) {
+  if (!userId) return;
+  try {
+    localStorage.removeItem(`qm_practice_cooldown_${userId}`);
+  } catch (_) {}
 }
 
 /**
@@ -50,6 +107,7 @@ export function getRemainingCooldownSeconds(userId) {
 
     const elapsed = Date.now() - lastAttempt;
     if (elapsed >= COOLDOWN_MS) {
+      localStorage.removeItem(`qm_practice_cooldown_${userId}`);
       return 0;
     }
     return Math.ceil((COOLDOWN_MS - elapsed) / 1000);
@@ -57,6 +115,17 @@ export function getRemainingCooldownSeconds(userId) {
     console.error('[cooldownManager] Error reading cooldown:', e);
     return 0;
   }
+}
+
+/**
+ * Xóa thủ công cooldown cho một user
+ */
+export function clearPracticeCooldown(userId) {
+  if (!userId) return;
+  try {
+    localStorage.setItem(`qm_practice_cooldown_${userId}`, '0');
+    localStorage.removeItem(`qm_practice_cooldown_${userId}`);
+  } catch (_) {}
 }
 
 /**

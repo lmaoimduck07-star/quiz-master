@@ -786,7 +786,7 @@ async function cleanStaleSessions() {
       const lastActive = data.lastActive || data.onlineSince || '';
       const isStale = data.status === 'deleted' || data.status === 'submitted' || (lastActive && lastActive < twoMinAgo);
       if (isStale) {
-        await storageV2.deleteFullSessionV2(d.id);
+        await deleteDoc(doc(db, 'active_sessionsV2', d.id));
         count++;
       }
     }

@@ -9,12 +9,14 @@ import {
   getRemainingCooldownSeconds,
   formatCooldownTime,
 } from '../utils/cooldownManager';
+import { getMistakeCountBySubject, getMistakeCountByExam } from '../utils/mistakeManager';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
+import PracticeModeModal from '../components/exams/PracticeModeModal';
 import {
   BookOpen, Clock, LogOut, ShieldAlert, Award, FileText, ChevronRight,
   Play, Sun, Moon, TrendingUp, AlertTriangle, Loader2, Code2,
-  Trophy, Calendar, Eye, CheckSquare, Square, BarChart3, Target
+  Trophy, Calendar, Eye, CheckSquare, Square, BarChart3, Target, BookMarked
 } from 'lucide-react';
 
 // 🔧 Chế độ bảo trì cổng lập trình — đặt true để tạm khóa truy cập, false để mở lại
@@ -35,12 +37,15 @@ export default function ClientDashboard() {
   const [subjects, setSubjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedSubject, setSelectedSubject] = useState(null);
+  const [selectedExam, setSelectedExam] = useState(null);
   const [showPracticeModal, setShowPracticeModal] = useState(false);
+  const [showMistakeModal, setShowMistakeModal] = useState(false);
+  const [selectedMistakeSubject, setSelectedMistakeSubject] = useState(null);
 
   // Cooldown 10 phút luyện tập theo tài khoản
   const isUnlimited = isUserUnlimited(currentUser);
   const [cooldownRemaining, setCooldownRemaining] = useState(() =>
-    currentUser?.id ? getRemainingCooldownSeconds(currentUser.id) : 0
+    (!isUnlimited && currentUser?.id) ? getRemainingCooldownSeconds(currentUser.id) : 0
   );
 
   useEffect(() => {
@@ -181,8 +186,7 @@ export default function ClientDashboard() {
     navigate('/admin/dashboard');
   };
 
-  // Launch Practice Test
-  const startPractice = async (subject, exam) => {
+  const startPractice = async (subject, exam, options = {}) => {
     // Kiểm tra nhanh từ state local trước
     if (exam.isLocked) {
       alert('🔒 Đề thi này đã bị Quản trị viên khóa! Vui lòng chọn bài thi khác.');
@@ -198,7 +202,6 @@ export default function ClientDashboard() {
     }
 
     // ── Verify tươi từ Firestore để tránh race condition ──
-    // (Admin có thể vừa khóa đề sau khi học sinh mở modal)
     if (exam.id) {
       try {
         const freshExam = await storageV2.getExamV2(exam.id);
@@ -215,21 +218,25 @@ export default function ClientDashboard() {
           return;
         }
       } catch (err) {
-        console.warn('[startPractice] Không thể verify exam từ Firestore, tiếp tục với state hiện tại:', err);
+        console.warn('[startPractice] Không thể verify exam từ Firestore:', err);
       }
     }
 
     const sessionId = buildSessionId('practice', subject.name);
-    const qCount = exam.questionCount || exam.questions?.length || 10;
-    const timeInMinutes = exam.config?.time || Math.max(5, Math.round(qCount * 1.5));
+    const qCount = options.questionCount || exam.questionCount || exam.questions?.length || 10;
+    const timeInMinutes = options.timeMode === 'zen'
+      ? null
+      : (exam.config?.time || Math.max(5, Math.round(qCount * 1.5)));
     navigate(`/client/exam/${sessionId}`, {
       state: {
         examId: exam.id,
         title: exam.config?.title || exam.title,
         questions: [],
-        timeLimit: timeInMinutes * 60,
+        timeLimit: timeInMinutes ? timeInMinutes * 60 : 99 * 60,
         mode: 'practice',
+        subjectId: subject.id,
         subjectName: subject.name,
+        zenMode: options.timeMode === 'zen',
         examSessionCode: sessionId
       }
     });
@@ -331,6 +338,7 @@ export default function ClientDashboard() {
 
   const openPracticeList = (subject) => {
     setSelectedSubject(subject);
+    setSelectedExam(null);
     setShowPracticeModal(true);
   };
 
@@ -636,6 +644,12 @@ export default function ClientDashboard() {
                             <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 leading-snug">
                               {subject.name}
                             </h3>
+                            {!isCodingSub && getMistakeCountBySubject(currentUser?.id, subject.id) > 0 && (
+                              <span className="text-[10px] font-black bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 px-2 py-0.5 rounded-full border border-violet-200 dark:border-violet-800 flex items-center gap-1">
+                                <BookMarked className="h-3 w-3" />
+                                {getMistakeCountBySubject(currentUser?.id, subject.id)} câu sai
+                              </span>
+                            )}
                           </div>
                           <div className="text-xs text-slate-400 dark:text-slate-500 font-semibold">ID: {subject.id}</div>
                           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-bold pt-1">
@@ -671,6 +685,21 @@ export default function ClientDashboard() {
                           </Button>
                         ) : (
                           <>
+                            {!isCodingSub && getMistakeCountBySubject(currentUser?.id, subject.id) > 0 && (
+                              <Button
+                                variant="outline"
+                                className="flex-none font-bold h-11 px-4 rounded-xl border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/20 bg-transparent gap-1.5"
+                                onClick={() => {
+                                  setSelectedMistakeSubject(subject);
+                                  setShowMistakeModal(true);
+                                }}
+                                title={`Chọn bài luyện câu sai môn ${subject.name}`}
+                              >
+                                <BookMarked className="h-4 w-4" />
+                                <span className="hidden sm:inline">Câu sai</span>
+                                <span className="font-black text-xs bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300 rounded-md px-1.5 py-0.5 ml-0.5">{getMistakeCountBySubject(currentUser?.id, subject.id)}</span>
+                              </Button>
+                            )}
                             <Button
                               variant="outline"
                               className="flex-1 md:flex-none font-bold h-11 px-6 rounded-xl border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 bg-transparent"
@@ -699,81 +728,54 @@ export default function ClientDashboard() {
       </div>
 
       {/* ═══════════════════════════════════════════
-          MODAL: Practice Exam List
+          STEP 1: Chọn đề luyện tập
       ═══════════════════════════════════════════ */}
-      {showPracticeModal && selectedSubject && (
+      {showPracticeModal && selectedSubject && !selectedExam && (
         <div className="fixed inset-0 bg-slate-900/50 dark:bg-slate-950/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <Card className="w-full max-w-lg border-none shadow-2xl rounded-3xl overflow-hidden animate-in zoom-in-95 duration-200 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
             <div className="bg-slate-50 dark:bg-slate-800 px-8 py-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
               <h2 className="text-xl font-bold text-slate-800 dark:text-white m-0 flex items-center gap-2">
                 <FileText className="h-5 w-5 text-primary dark:text-blue-400" />
-                Luyện tập: {selectedSubject.name}
+                Chọn đề: {selectedSubject.name}
               </h2>
               <button
                 onClick={() => setShowPracticeModal(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition bg-transparent"
               >
-                <XIcon className="h-6 w-6" />
+                <span className="text-xl font-bold">✕</span>
               </button>
             </div>
             <CardContent className="p-6 space-y-3 overflow-y-auto max-h-[60vh]">
               {!isUnlimited && cooldownRemaining > 0 && (
                 <div className="p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 rounded-xl text-xs font-semibold flex items-center gap-2 mb-3 border border-amber-200 dark:border-amber-800">
                   <Clock className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                  <span>
-                    Tài khoản đang trong thời gian chờ (10 phút) giữa các lượt làm bài. Thử lại sau{' '}
-                    <strong className="font-mono text-amber-900 dark:text-amber-200 text-sm">{formatCooldownTime(cooldownRemaining)}</strong>
-                  </span>
+                  <span>Thời gian chờ còn <strong className="font-mono">{formatCooldownTime(cooldownRemaining)}</strong></span>
                 </div>
               )}
-
               {selectedSubject.exams?.length > 0 ? (
                 selectedSubject.exams.map((ex, idx) => {
                   const isLocked = !!ex.isLocked;
                   const isMaintenance = !!ex.isMaintenance;
-                  const isBlocked = isLocked || isMaintenance || (!isUnlimited && cooldownRemaining > 0);
-
+                  const isBlocked = isLocked || isMaintenance;
                   return (
                     <div
                       key={ex.id}
                       className={`p-4 border rounded-2xl flex items-center justify-between transition ${
                         isBlocked
-                          ? 'opacity-70 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 cursor-not-allowed'
-                          : 'border-slate-100 dark:border-slate-800 hover:border-primary/30 dark:hover:border-blue-500/30 hover:bg-primary/5 dark:hover:bg-blue-950/20 cursor-pointer group'
+                          ? 'opacity-60 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+                          : 'border-slate-100 dark:border-slate-800 hover:border-primary/40 dark:hover:border-blue-500/40 hover:bg-primary/5 dark:hover:bg-blue-950/20 cursor-pointer group'
                       }`}
-                      onClick={() => {
-                        if (!isBlocked) {
-                          setShowPracticeModal(false);
-                          startPractice(selectedSubject, ex);
-                        }
-                      }}
+                      onClick={() => { if (!isBlocked) setSelectedExam(ex); }}
                     >
                       <div className="flex-1 min-w-0 pr-3">
                         <div className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-2 flex-wrap">
                           <span>Bài {idx + 1}: {ex.config?.title || ex.title}</span>
-                          {isLocked && (
-                            <span className="text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 px-2 py-0.5 rounded border border-red-200 dark:border-red-800">
-                              🔒 Đã khóa
-                            </span>
-                          )}
-                          {isMaintenance && (
-                            <span className="text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800">
-                              🚧 Bảo trì
-                            </span>
-                          )}
-                          {!isUnlimited && cooldownRemaining > 0 && !isLocked && !isMaintenance && (
-                            <span className="text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800 font-mono">
-                              ⏱️ Chờ {formatCooldownTime(cooldownRemaining)}
-                            </span>
-                          )}
+                          {isLocked && <span className="text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 px-2 py-0.5 rounded border border-red-200 dark:border-red-800">🔒 Đã khóa</span>}
+                          {isMaintenance && <span className="text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800">🚧 Bảo trì</span>}
                         </div>
                         <div className="flex gap-4 text-xs text-slate-400 dark:text-slate-500 mt-1.5 font-medium">
-                          <span className="flex items-center gap-1">
-                            <FileText className="h-3.5 w-3.5" /> {ex.questions?.length ?? ex.questionCount ?? 0} câu hỏi
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3.5 w-3.5" /> ~{ex.config?.time || ex.config?.timeLimit || Math.max(5, Math.round((ex.questions?.length ?? ex.questionCount ?? 0) * 1.5))} phút
-                          </span>
+                          <span className="flex items-center gap-1"><FileText className="h-3.5 w-3.5" />{ex.questions?.length ?? ex.questionCount ?? 0} câu</span>
+                          <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" />~{ex.config?.time || Math.max(5, Math.round((ex.questions?.length ?? ex.questionCount ?? 0) * 1.5))} phút</span>
                         </div>
                       </div>
                       <ChevronRight className={`h-5 w-5 ${isBlocked ? 'text-slate-300 dark:text-slate-700' : 'text-slate-400 group-hover:text-primary dark:group-hover:text-blue-400 group-hover:translate-x-1'} transition-all shrink-0`} />
@@ -785,11 +787,111 @@ export default function ClientDashboard() {
               )}
             </CardContent>
             <div className="bg-slate-50 dark:bg-slate-800 px-8 py-4 border-t border-slate-100 dark:border-slate-700 flex justify-end">
+              <Button variant="ghost" className="rounded-xl font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 bg-transparent" onClick={() => setShowPracticeModal(false)}>Đóng lại</Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* STEP 2: PracticeModeModal — chọn chế độ sau khi đã chọn đề */}
+      <PracticeModeModal
+        isOpen={showPracticeModal && !!selectedExam}
+        onClose={() => { setShowPracticeModal(false); setSelectedExam(null); }}
+        subject={selectedSubject}
+        exam={selectedExam}
+        isUnlimited={isUnlimited}
+        cooldownRemaining={cooldownRemaining}
+        formatCooldownTime={formatCooldownTime}
+        onStartStandard={startPractice}
+      />
+
+      {/* ═══════════════════════════════════════════
+          MODAL: Chọn bài luyện câu sai
+      ═══════════════════════════════════════════ */}
+      {showMistakeModal && selectedMistakeSubject && (
+        <div className="fixed inset-0 bg-slate-900/50 dark:bg-slate-950/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <Card className="w-full max-w-lg border-none shadow-2xl rounded-3xl overflow-hidden animate-in zoom-in-95 duration-200 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+            <div className="bg-slate-50 dark:bg-slate-800 px-8 py-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+              <div>
+                <span className="text-xs font-bold text-violet-500 uppercase tracking-wider">Sổ tay câu sai</span>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white m-0 flex items-center gap-2">
+                  <BookMarked className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                  {selectedMistakeSubject.name}
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowMistakeModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition bg-transparent"
+              >
+                <span className="text-xl font-bold">✕</span>
+              </button>
+            </div>
+            <CardContent className="p-6 space-y-3 overflow-y-auto max-h-[60vh]">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                Chọn bài thi có câu sai tồn đọng để tiến hành luyện lại:
+              </p>
+              {selectedMistakeSubject.exams?.length > 0 ? (
+                selectedMistakeSubject.exams.map((ex, idx) => {
+                  const mistakeCount = getMistakeCountByExam(currentUser?.id, selectedMistakeSubject.id, ex.id);
+                  const hasMistakes = mistakeCount > 0;
+
+                  return (
+                    <div
+                      key={ex.id}
+                      className={`p-4 border rounded-2xl flex items-center justify-between transition ${
+                        hasMistakes
+                          ? 'border-violet-200 dark:border-violet-800/80 bg-violet-50/40 dark:bg-violet-950/20 hover:border-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/40 cursor-pointer group shadow-sm'
+                          : 'opacity-40 border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 cursor-not-allowed select-none'
+                      }`}
+                      onClick={() => {
+                        if (hasMistakes) {
+                          setShowMistakeModal(false);
+                          navigate(`/client/practice/mistakes/${selectedMistakeSubject.id}`, {
+                            state: {
+                              examId: ex.id,
+                              examTitle: ex.config?.title || ex.title,
+                            }
+                          });
+                        }
+                      }}
+                    >
+                      <div className="flex-1 min-w-0 pr-3">
+                        <div className="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-2 flex-wrap">
+                          <span>Bài {idx + 1}: {ex.config?.title || ex.title}</span>
+                          {hasMistakes ? (
+                            <span className="text-xs font-black bg-violet-100 dark:bg-violet-900/60 text-violet-700 dark:text-violet-300 px-2.5 py-0.5 rounded-full border border-violet-300 dark:border-violet-700 animate-pulse">
+                              🔥 {mistakeCount} câu sai
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full">
+                              ✓ 0 câu sai
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-1 font-medium">
+                          {hasMistakes ? 'Bấm để làm lại các câu chưa nắm vững' : 'Đã nắm vững toàn bộ câu hỏi của bài này'}
+                        </div>
+                      </div>
+                      <ChevronRight className={`h-5 w-5 ${hasMistakes ? 'text-violet-500 group-hover:translate-x-1' : 'text-slate-300 dark:text-slate-700'} transition-all shrink-0`} />
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-center text-slate-500 py-8">Chưa có đề thi nào trong môn này.</div>
+              )}
+            </CardContent>
+            <div className="bg-slate-50 dark:bg-slate-800 px-8 py-4 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
               <Button
                 variant="ghost"
-                className="rounded-xl font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 bg-transparent"
-                onClick={() => setShowPracticeModal(false)}
+                className="text-xs font-bold text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-950/40 rounded-xl"
+                onClick={() => {
+                  setShowMistakeModal(false);
+                  navigate(`/client/practice/mistakes/${selectedMistakeSubject.id}`);
+                }}
               >
+                Luyện tất cả ({getMistakeCountBySubject(currentUser?.id, selectedMistakeSubject.id)} câu)
+              </Button>
+              <Button variant="ghost" className="rounded-xl font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 bg-transparent" onClick={() => setShowMistakeModal(false)}>
                 Đóng lại
               </Button>
             </div>

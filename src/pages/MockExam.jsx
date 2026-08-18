@@ -82,7 +82,7 @@ export default function MockExam() {
 
   // Extract state passed from ClientDashboard or fall back to saved session
   const examData = savedSession?.examData || location.state || null;
-  const { examId, title, timeLimit: rawTimeLimit, mode, subjectName } = examData || {};
+  const { examId, title, timeLimit: rawTimeLimit, mode, subjectName, subjectId } = examData || {};
   const timeLimit = rawTimeLimit || (examData?.config?.time ? examData.config.time * 60 : 15 * 60);
 
   const [questions, setQuestions] = useState(() => examData?.questions?.filter(Boolean) || []);
@@ -144,6 +144,7 @@ export default function MockExam() {
   const [flagged, setFlagged] = useState(() => savedSession?.flagged || []);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
   const examPassword = examData?.password || examData?.config?.password || '';
   const [screen, setScreen] = useState(() => {
     if (savedSession) return 'quiz';
@@ -623,6 +624,9 @@ export default function MockExam() {
       score,
       correctCount,
       totalCount: questions.length,
+      examId: examId || null,
+      subjectId: subjectId || null,
+      subjectName,
       questions: reviewedQuestions
     };
     try {
@@ -948,7 +952,15 @@ export default function MockExam() {
               </h2>
 
               {questions[currentQuestion - 1]?.image && (
-                <img src={questions[currentQuestion - 1]?.image} alt="Question Graphic" className="max-w-full max-h-32 rounded-xl border border-slate-200 dark:border-slate-800 mb-3 mx-auto block shadow-sm flex-shrink-0" />
+                <div className="mb-4 flex-shrink-0 flex justify-center">
+                  <img
+                    src={questions[currentQuestion - 1]?.image}
+                    alt="Question Graphic"
+                    onClick={() => setPreviewImage(questions[currentQuestion - 1]?.image)}
+                    className="max-w-full max-h-80 md:max-h-96 rounded-2xl border-2 border-slate-200 dark:border-slate-700 mb-3 mx-auto block shadow-md object-contain cursor-zoom-in hover:shadow-lg transition-transform bg-white dark:bg-slate-900 p-1.5"
+                    title="Bấm vào để phóng to hình ảnh"
+                  />
+                </div>
               )}
 
               <div className="flex-1 min-h-0 overflow-y-auto">
@@ -1603,6 +1615,24 @@ export default function MockExam() {
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+      {/* ─── Lightbox Zoom Image Modal ─── */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200 cursor-zoom-out"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="relative max-w-5xl max-h-[90vh] flex flex-col items-center">
+            <img
+              src={previewImage}
+              alt="Phóng to"
+              className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border-2 border-white/20 bg-white"
+            />
+            <span className="mt-3 text-white/80 text-xs font-semibold bg-black/40 px-4 py-1.5 rounded-full border border-white/10">
+              Nhấp bất kỳ đâu để đóng
+            </span>
+          </div>
         </div>
       )}
     </div>
