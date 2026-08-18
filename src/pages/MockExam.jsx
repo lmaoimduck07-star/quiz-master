@@ -89,7 +89,8 @@ export default function MockExam() {
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(() => (examData?.questions?.filter(Boolean)?.length || 0) === 0);
 
   useEffect(() => {
-    if (examId && questions.length === 0) {
+    // Bỏ qua load từ Firestore nếu examId là ID giả của simulation
+    if (examId && !examId.startsWith('sim_') && questions.length === 0) {
       setIsLoadingQuestions(true);
       storageV2.loadQuestionsV2(examId).then((qs) => {
         if (qs && qs.length > 0) {
@@ -100,6 +101,9 @@ export default function MockExam() {
         console.error('[MockExam] Error loading V2 questions:', err);
         setIsLoadingQuestions(false);
       });
+    } else if (examId?.startsWith('sim_') && questions.length === 0) {
+      // Simulation với ID giả — câu hỏi đã phải có sẵn trong state
+      setIsLoadingQuestions(false);
     }
   }, [examId, questions.length]);
 
@@ -820,7 +824,8 @@ export default function MockExam() {
             <Button
               onClick={async () => {
                 // ── Verify tươi từ Firestore trước khi vào thi ──
-                if (examId) {
+                // Bỏ qua nếu examId là ID giả của simulation (không tồn tại trong Firestore)
+                if (examId && !examId.startsWith('sim_')) {
                   setStartingExam(true);
                   try {
                     const freshExam = await storageV2.getExamV2(examId);
@@ -863,7 +868,7 @@ export default function MockExam() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-200">
+    <div className="h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col overflow-hidden transition-colors duration-200">
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 flex items-center justify-between sticky top-0 z-20 shadow-sm transition-colors">
         <div className="flex flex-col">
           <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Môn học: {subjectName}</span>
@@ -880,10 +885,11 @@ export default function MockExam() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Navigation list */}
-        <div className="w-80 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 p-6 overflow-y-auto hidden lg:flex flex-col justify-between transition-colors">
-          <div>
+        <div className="w-80 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 hidden lg:flex flex-col transition-colors">
+          {/* Question list — scrollable */}
+          <div className="flex-1 overflow-y-auto p-6">
             <h3 className="font-bold mb-4 text-slate-700 dark:text-slate-300 text-sm uppercase tracking-wider">Danh sách câu hỏi ({questions.length})</h3>
-            <div className="grid grid-cols-5 gap-2 mb-6">
+            <div className="grid grid-cols-5 gap-2">
               {questions.map((_, i) => {
                 const qNum = i + 1;
                 const isAnswered = answers[qNum] !== undefined && answers[qNum] !== '' && (Array.isArray(answers[qNum]) ? answers[qNum].length > 0 : true);
@@ -914,29 +920,13 @@ export default function MockExam() {
               })}
             </div>
           </div>
-
-          {/* Color Legend */}
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2 text-xs font-semibold">
-            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-              <span className="w-3.5 h-3.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"></span> Chưa làm
-            </div>
-            <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-              <span className="w-3.5 h-3.5 rounded bg-emerald-500 text-white"></span> Đã làm
-            </div>
-            <div className="flex items-center gap-2 text-red-500">
-              <span className="w-3.5 h-3.5 rounded bg-red-500 text-white"></span> Cần xem lại (🚩)
-            </div>
-            <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
-              <span className="w-3.5 h-3.5 rounded bg-blue-50 dark:bg-blue-950 border-2 border-blue-500"></span> Đang xem
-            </div>
-          </div>
         </div>
 
         {/* Question display */}
-        <div className="flex-1 overflow-y-auto p-8 flex justify-center items-start bg-slate-50 dark:bg-slate-950/60 transition-colors">
-          <Card className="w-full max-w-3xl border-0 shadow-sm rounded-3xl overflow-hidden bg-white dark:bg-slate-900">
-            <CardContent className="p-8">
-              <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex-1 overflow-hidden flex flex-col p-4 bg-slate-50 dark:bg-slate-950/60 transition-colors">
+          <Card className="w-full flex-1 flex flex-col border-0 shadow-sm rounded-3xl overflow-hidden bg-white dark:bg-slate-900">
+            <CardContent className="flex-1 flex flex-col overflow-hidden pt-6">
+              <div className="flex justify-between items-center mb-3 pb-3 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
                 <span className="bg-primary/10 dark:bg-blue-900/20 text-primary dark:text-blue-400 px-4 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider">
                   Câu {currentQuestion} / {questions.length}
                 </span>
@@ -953,76 +943,93 @@ export default function MockExam() {
                 </button>
               </div>
 
-              <h2 className="text-lg md:text-xl font-bold text-slate-800 dark:text-slate-100 mb-8 leading-relaxed">
+              <h2 className="text-base md:text-lg font-bold text-slate-800 dark:text-slate-100 mb-3 leading-relaxed flex-shrink-0">
                 <span dangerouslySetInnerHTML={{ __html: formatQuestionText(questions[currentQuestion - 1]?.content || questions[currentQuestion - 1]?.question || '') }} />
               </h2>
 
               {questions[currentQuestion - 1]?.image && (
-                <img src={questions[currentQuestion - 1]?.image} alt="Question Graphic" className="max-w-full max-h-64 rounded-xl border border-slate-200 dark:border-slate-800 mb-6 mx-auto block shadow-sm" />
+                <img src={questions[currentQuestion - 1]?.image} alt="Question Graphic" className="max-w-full max-h-32 rounded-xl border border-slate-200 dark:border-slate-800 mb-3 mx-auto block shadow-sm flex-shrink-0" />
               )}
 
-              <div className="space-y-4">
+              <div className="flex-1 min-h-0 overflow-y-auto">
                 {(() => {
                   const q = questions[currentQuestion - 1];
                   const qType = q?.type || 'single';
 
                   if (qType === 'single') {
-                    return (q.options || []).map((opt, i) => {
-                      const optImg = (q.optionImages && q.optionImages[i]) ? q.optionImages[i] : null;
-                      return (
-                        <label
-                          key={i}
-                          className={`flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition ${answers[currentQuestion] === i ? 'border-primary bg-primary/5 dark:border-blue-500 dark:bg-blue-500/10' : 'border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700'}`}
-                        >
-                          <input
-                            type="radio"
-                            name={`question-${currentQuestion}`}
-                            className="w-5 h-5 text-primary dark:text-blue-500 border-slate-300 dark:border-slate-700 focus:ring-primary dark:focus:ring-blue-500 flex-shrink-0 mt-0.5"
-                            checked={answers[currentQuestion] === i}
-                            onChange={() => setAnswers(prev => ({ ...prev, [currentQuestion]: i }))}
-                          />
-                          <div className="flex flex-col flex-1">
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300" dangerouslySetInnerHTML={{ __html: opt || '' }} />
-                            {optImg && (
-                              <img src={optImg} alt={`Option ${i + 1}`} className="mt-2 max-h-40 rounded-lg border border-slate-200 dark:border-slate-800 object-contain shadow-sm" />
-                            )}
-                          </div>
-                        </label>
-                      );
-                    });
+                    const OPT_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
+                    return (
+                      <div className="grid grid-cols-2 gap-3 content-start">
+                        {(q.options || []).map((opt, i) => {
+                          const optImg = (q.optionImages && q.optionImages[i]) ? q.optionImages[i] : null;
+                          const isSelected = answers[currentQuestion] === i;
+                          return (
+                            <label
+                              key={i}
+                              className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition ${isSelected ? 'border-primary bg-primary/5 dark:border-blue-500 dark:bg-blue-500/10' : 'border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700'}`}
+                            >
+                              <input
+                                type="radio"
+                                name={`question-${currentQuestion}`}
+                                className="sr-only"
+                                checked={isSelected}
+                                onChange={() => setAnswers(prev => ({ ...prev, [currentQuestion]: i }))}
+                              />
+                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0 transition ${isSelected ? 'bg-primary text-white dark:bg-blue-500' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                                {OPT_LABELS[i]}
+                              </div>
+                              <div className="flex flex-col flex-1 min-w-0">
+                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: opt || '' }} />
+                                {optImg && (
+                                  <img src={optImg} alt={`Option ${i + 1}`} className="mt-2 max-h-24 rounded-lg border border-slate-200 dark:border-slate-800 object-contain shadow-sm" />
+                                )}
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    );
                   }
 
                   if (qType === 'multiselect') {
-                    return (q.options || []).map((opt, i) => {
-                      const currentAnswers = answers[currentQuestion] || [];
-                      const isChecked = currentAnswers.includes(i);
-                      const optImg = (q.optionImages && q.optionImages[i]) ? q.optionImages[i] : null;
-                      return (
-                        <label
-                          key={i}
-                          className={`flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition ${isChecked ? 'border-primary bg-primary/5 dark:border-blue-500 dark:bg-blue-500/10' : 'border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700'}`}
-                        >
-                          <input
-                            type="checkbox"
-                            name={`question-${currentQuestion}`}
-                            className="w-5 h-5 text-primary dark:text-blue-500 border-slate-300 dark:border-slate-700 focus:ring-primary dark:focus:ring-blue-500 rounded flex-shrink-0 mt-0.5"
-                            checked={isChecked}
-                            onChange={() => {
-                              const nextAnswers = isChecked
-                                ? currentAnswers.filter(x => x !== i)
-                                : [...currentAnswers, i];
-                              setAnswers(prev => ({ ...prev, [currentQuestion]: nextAnswers }));
-                            }}
-                          />
-                          <div className="flex flex-col flex-1">
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300" dangerouslySetInnerHTML={{ __html: opt || '' }} />
-                            {optImg && (
-                              <img src={optImg} alt={`Option ${i + 1}`} className="mt-2 max-h-40 rounded-lg border border-slate-200 dark:border-slate-800 object-contain shadow-sm" />
-                            )}
-                          </div>
-                        </label>
-                      );
-                    });
+                    const OPT_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
+                    return (
+                      <div className="grid grid-cols-2 gap-3 content-start">
+                        {(q.options || []).map((opt, i) => {
+                          const currentAnswers = answers[currentQuestion] || [];
+                          const isChecked = currentAnswers.includes(i);
+                          const optImg = (q.optionImages && q.optionImages[i]) ? q.optionImages[i] : null;
+                          return (
+                            <label
+                              key={i}
+                              className={`flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition ${isChecked ? 'border-primary bg-primary/5 dark:border-blue-500 dark:bg-blue-500/10' : 'border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700'}`}
+                            >
+                              <input
+                                type="checkbox"
+                                name={`question-${currentQuestion}`}
+                                className="sr-only"
+                                checked={isChecked}
+                                onChange={() => {
+                                  const nextAnswers = isChecked
+                                    ? currentAnswers.filter(x => x !== i)
+                                    : [...currentAnswers, i];
+                                  setAnswers(prev => ({ ...prev, [currentQuestion]: nextAnswers }));
+                                }}
+                              />
+                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0 transition ${isChecked ? 'bg-primary text-white dark:bg-blue-500' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                                {OPT_LABELS[i]}
+                              </div>
+                              <div className="flex flex-col flex-1 min-w-0">
+                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: opt || '' }} />
+                                {optImg && (
+                                  <img src={optImg} alt={`Option ${i + 1}`} className="mt-2 max-h-24 rounded-lg border border-slate-200 dark:border-slate-800 object-contain shadow-sm" />
+                                )}
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    );
                   }
 
                   if (qType === 'fill') {
@@ -1470,30 +1477,89 @@ export default function MockExam() {
                 })()}
               </div>
 
-              <div className="mt-10 flex justify-between border-t border-slate-100 dark:border-slate-800 pt-6">
-                <Button
-                  variant="outline"
-                  disabled={currentQuestion === 1}
-                  onClick={() => setCurrentQuestion(prev => prev - 1)}
-                  className="rounded-xl font-bold h-11 border-slate-200 dark:border-slate-800 bg-transparent"
-                >
-                  Câu trước
-                </Button>
-                <span className="text-slate-400 font-bold text-sm self-center">
-                  {currentQuestion} / {questions.length}
-                </span>
-                <Button
-                  disabled={currentQuestion === questions.length}
-                  onClick={() => setCurrentQuestion(prev => prev + 1)}
-                  className="rounded-xl font-bold h-11"
-                >
-                  Câu tiếp theo
-                </Button>
-              </div>
+
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {/* ─── Bottom Bar: Legend (left) + Navigation (right) ─── */}
+      <nav className="shrink-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-[0_-4px_24px_rgba(0,0,0,0.07)] dark:shadow-[0_-4px_24px_rgba(0,0,0,0.3)] flex">
+
+        {/* LEFT: Stats legend — same width as sidebar */}
+        <div className="w-80 shrink-0 hidden lg:flex items-center px-6 py-4">
+          {(() => {
+            const totalAnswered = questions.reduce((count, _, i) => {
+              const qNum = i + 1;
+              const ans = answers[qNum];
+              return (ans !== undefined && ans !== '' && (Array.isArray(ans) ? ans.length > 0 : true)) ? count + 1 : count;
+            }, 0);
+            const totalUnanswered = questions.length - totalAnswered;
+            const totalFlagged = flagged.length;
+            return (
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Chưa làm */}
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800">
+                  <span className="w-2.5 h-2.5 rounded-sm border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shrink-0"></span>
+                  <span className="text-xs font-black text-slate-700 dark:text-slate-200">{totalUnanswered}</span>
+                  <span className="text-xs font-medium text-slate-400 dark:text-slate-500">chưa làm</span>
+                </div>
+                {/* Đã làm */}
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 shrink-0"></span>
+                  <span className="text-xs font-black text-emerald-700 dark:text-emerald-400">{totalAnswered}</span>
+                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-500">đã làm</span>
+                </div>
+                {/* Cần xem lại — chỉ hiện khi có */}
+                {totalFlagged > 0 && (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-red-50 dark:bg-red-950/40">
+                    <span className="text-xs leading-none">🚩</span>
+                    <span className="text-xs font-black text-red-600 dark:text-red-400">{totalFlagged}</span>
+                    <span className="text-xs font-medium text-red-500 dark:text-red-500">cần xem</span>
+                  </div>
+                )}
+                {/* Đang xem */}
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/40">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-blue-50 dark:bg-blue-950 border-2 border-blue-500 shrink-0"></span>
+                  <span className="text-xs font-medium text-blue-600 dark:text-blue-400">đang xem</span>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* RIGHT: Navigation */}
+        <div className="flex-1 flex items-center gap-4 px-6 py-4">
+          <Button
+            variant="outline"
+            disabled={currentQuestion === 1}
+            onClick={() => setCurrentQuestion(prev => prev - 1)}
+            className="rounded-xl font-bold h-12 px-6 border-slate-200 dark:border-slate-700 bg-transparent shrink-0 flex items-center gap-1.5 text-base"
+          >
+            ← Câu trước
+          </Button>
+
+          <div className="flex-1 flex flex-col items-center gap-2">
+            <span className="text-sm font-bold text-slate-500 dark:text-slate-400">
+              Câu {currentQuestion} / {questions.length}
+            </span>
+            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-primary dark:bg-blue-500 h-full rounded-full transition-all duration-300"
+                style={{ width: `${(currentQuestion / questions.length) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          <Button
+            disabled={currentQuestion === questions.length}
+            onClick={() => setCurrentQuestion(prev => prev + 1)}
+            className="rounded-xl font-bold h-12 px-6 shrink-0 flex items-center gap-1.5 text-base"
+          >
+            Câu tiếp theo →
+          </Button>
+        </div>
+      </nav>
 
       {showWarning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-red-950/40 backdrop-blur-sm animate-in fade-in duration-200">

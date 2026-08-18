@@ -955,7 +955,8 @@ export default function MockExamMobile() {
 
   // ── Fetch Questions V2 ──
   useEffect(() => {
-    if (examId && questions.length === 0) {
+    // Bỏ qua load từ Firestore nếu examId là ID giả của simulation
+    if (examId && !examId.startsWith('sim_') && questions.length === 0) {
       setIsLoadingQuestions(true);
       storageV2.loadQuestionsV2(examId).then(qs => {
         if (qs && qs.length > 0) {
@@ -966,6 +967,9 @@ export default function MockExamMobile() {
       }).finally(() => {
         setIsLoadingQuestions(false);
       });
+    } else if (examId?.startsWith('sim_') && questions.length === 0) {
+      // Simulation với ID giả — câu hỏi đã có sẵn trong state
+      setIsLoadingQuestions(false);
     }
   }, [examId, questions.length]);
 
@@ -1284,7 +1288,8 @@ export default function MockExamMobile() {
         startingExam={startingExam}
         onStart={async () => {
           // ── Verify tươi từ Firestore trước khi vào thi ──
-          if (examId) {
+          // Bỏ qua nếu examId là ID giả của simulation
+          if (examId && !examId.startsWith('sim_')) {
             setStartingExam(true);
             try {
               const freshExam = await storageV2.getExamV2(examId);

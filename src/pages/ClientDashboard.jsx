@@ -913,7 +913,7 @@ export default function ClientDashboard() {
                               Bài {idx + 1}: {ex.config?.title || ex.title}
                             </div>
                             <div className="text-xs text-slate-400 font-medium mt-0.5">
-                              {ex.questions?.length || 0} câu hỏi
+                              {ex.questionCount ?? ex.questions?.length ?? 0} câu hỏi
                             </div>
                           </div>
                         </div>

@@ -2,6 +2,40 @@ import { useState, useEffect, useRef } from 'react';
 import { Image as ImageIcon, Trash2, Plus, Pencil, Save, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 
+// Component OptionEditRow được định nghĩa NGOÀI component chính
+// để tránh bị tạo lại mỗi lần render (gây mất focus input)
+const OptionEditRow = ({ idx, isChecked, inputEl, borderClass, optImg, optionText, onTextChange, onPaste, onImageClick, onRemoveOption, onRemoveImage }) => {
+  return (
+    <div className={`border-2 rounded-xl mb-3 transition shadow-sm overflow-hidden ${borderClass}`}>
+      <div className="flex items-center gap-3 p-3">
+        {inputEl}
+        <input
+          type="text"
+          className="flex-1 bg-transparent outline-none text-slate-700 font-semibold"
+          value={(optionText || '').replace(/<[^>]+>/g, '')}
+          onChange={(e) => onTextChange(idx, e.target.value)}
+          onPaste={(e) => onPaste(e, idx)}
+          placeholder={`Đáp án ${idx + 1}... (dán ảnh được, Ctrl+V)`}
+        />
+        <Button
+          variant="outline"
+          type="button"
+          title="Đính kèm ảnh cho đáp án này"
+          onClick={() => onImageClick(idx)}
+          className="h-10 w-10 p-0 text-sky-500 hover:text-white border-sky-200 hover:bg-sky-500 transition"
+        ><ImageIcon className="h-4 w-4" /></Button>
+        <Button variant="outline" onClick={() => onRemoveOption(idx)} className="h-10 w-10 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50 border-transparent hover:border-red-200 transition"><Trash2 className="h-4 w-4" /></Button>
+      </div>
+      {optImg && (
+        <div className="px-3 pb-3 flex items-start gap-2">
+          <img src={optImg} alt={`Ảnh đáp án ${idx + 1}`} className="max-h-32 rounded-lg border border-slate-200 object-contain" />
+          <Button variant="outline" onClick={() => onRemoveImage(idx)} className="text-red-400 hover:text-red-600 text-xs font-bold bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-1 rounded-lg transition mt-1 gap-1"><X className="h-3 w-3" /> Xóa ảnh</Button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function QuestionModal({ isOpen, questionData, onSave, onClose }) {
   const [formData, setFormData] = useState(null);
   const [draggedIdx, setDraggedIdx] = useState(null);
@@ -164,54 +198,29 @@ export default function QuestionModal({ isOpen, questionData, onSave, onClose })
   const moveOrderUp = (idx) => { if (idx > 0) moveOrderItem(idx, idx - 1); };
   const moveOrderDown = (idx) => { if (idx < formData.items.length - 1) moveOrderItem(idx, idx + 1); };
 
-  // Component 1 ô đáp án — input text + nút ảnh + preview, hỗ trợ paste ảnh
-  const OptionEditRow = ({ idx, isChecked, inputEl, borderClass }) => {
-    const optImg = (formData.optionImages || [])[idx];
-    return (
-      <div className={`border-2 rounded-xl mb-3 transition shadow-sm overflow-hidden ${borderClass}`}>
-        <div className="flex items-center gap-3 p-3">
-          {inputEl}
-          <input
-            type="text"
-            className="flex-1 bg-transparent outline-none text-slate-700 font-semibold"
-            value={(formData.options[idx] || '').replace(/<[^>]+>/g, '')}
-            onChange={(e) => handleOptionTextChange(idx, e.target.value)}
-            onPaste={(e) => handleOptionPaste(e, idx)}
-            placeholder={`Đáp án ${idx + 1}... (dán ảnh được, Ctrl+V)`}
-          />
-          <Button
-            variant="outline"
-            type="button"
-            title="Đính kèm ảnh cho đáp án này"
-            onClick={() => optionFileRefs.current[idx]?.click()}
-            className="h-10 w-10 p-0 text-sky-500 hover:text-white border-sky-200 hover:bg-sky-500 transition"
-          ><ImageIcon className="h-4 w-4" /></Button>
-          <input
-            type="file" accept="image/*" className="hidden"
-            ref={el => optionFileRefs.current[idx] = el}
-            onChange={(e) => handleOptionImageUpload(e, idx)}
-          />
-          <Button variant="outline" onClick={() => removeOption(idx)} className="h-10 w-10 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50 border-transparent hover:border-red-200 transition"><Trash2 className="h-4 w-4" /></Button>
-        </div>
-        {optImg && (
-          <div className="px-3 pb-3 flex items-start gap-2">
-            <img src={optImg} alt={`Ảnh đáp án ${idx + 1}`} className="max-h-32 rounded-lg border border-slate-200 object-contain" />
-            <Button variant="outline" onClick={() => removeOptionImage(idx)} className="text-red-400 hover:text-red-600 text-xs font-bold bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-1 rounded-lg transition mt-1 gap-1"><X className="h-3 w-3" /> Xóa ảnh</Button>
-          </div>
-        )}
-      </div>
-    );
-  };
-
   let dynamicBody = null;
 
   if (formData.type === 'single') {
     dynamicBody = (
       <div className="mt-6 border-t pt-6">
         <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Các Đáp Án (Chọn ô tròn để làm đáp án đúng — có thể dán ảnh)</label>
+        {/* file inputs riêng, ẩn */}
+        {formData.options.map((_, i) => (
+          <input key={`file-${i}`} type="file" accept="image/*" className="hidden"
+            ref={el => optionFileRefs.current[i] = el}
+            onChange={(e) => handleOptionImageUpload(e, i)}
+          />
+        ))}
         {formData.options.map((opt, i) => (
           <OptionEditRow key={i} idx={i}
             borderClass={formData.correct === i ? 'border-green-500 bg-green-50' : 'border-slate-200 bg-white'}
+            optionText={formData.options[i]}
+            optImg={(formData.optionImages || [])[i]}
+            onTextChange={handleOptionTextChange}
+            onPaste={handleOptionPaste}
+            onImageClick={(idx) => optionFileRefs.current[idx]?.click()}
+            onRemoveOption={removeOption}
+            onRemoveImage={removeOptionImage}
             inputEl={<input type="radio" className="w-5 h-5 accent-green-600 flex-shrink-0" checked={formData.correct === i} onChange={() => handleSingleCorrectChange(i)} />}
           />
         ))}
@@ -223,11 +232,25 @@ export default function QuestionModal({ isOpen, questionData, onSave, onClose })
     dynamicBody = (
       <div className="mt-6 border-t pt-6">
         <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Các Đáp Án (Tick chọn nhiều ô vuông — có thể dán ảnh)</label>
+        {/* file inputs riêng, ẩn */}
+        {formData.options.map((_, i) => (
+          <input key={`file-${i}`} type="file" accept="image/*" className="hidden"
+            ref={el => optionFileRefs.current[i] = el}
+            onChange={(e) => handleOptionImageUpload(e, i)}
+          />
+        ))}
         {formData.options.map((opt, i) => {
           let isChecked = formData.corrects.includes(i);
           return (
             <OptionEditRow key={i} idx={i}
               borderClass={isChecked ? 'border-green-500 bg-green-50' : 'border-slate-200 bg-white'}
+              optionText={formData.options[i]}
+              optImg={(formData.optionImages || [])[i]}
+              onTextChange={handleOptionTextChange}
+              onPaste={handleOptionPaste}
+              onImageClick={(idx) => optionFileRefs.current[idx]?.click()}
+              onRemoveOption={removeOption}
+              onRemoveImage={removeOptionImage}
               inputEl={<input type="checkbox" className="w-5 h-5 accent-green-600 rounded flex-shrink-0" checked={isChecked} onChange={() => handleMultiCorrectChange(i)} />}
             />
           );
