@@ -110,6 +110,7 @@ export default function MistakePractice() {
 
   const currentQ = questions[currentIdx];
   const cs = qState[currentIdx] || {};
+  const qType = currentQ?.type || 'single';
 
   const setAnswer = (ans) => {
     if (cs.checked) return;
